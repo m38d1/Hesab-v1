@@ -457,6 +457,34 @@
               return a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id;
             });
         }
+        /* Newest transaction date overall, or null when there is nothing at all. */
+        function newestTx() {
+          if (!S.tx.length) return null;
+          var d = '';
+          for (var i = 0; i < S.tx.length; i++) if (S.tx[i].date > d) d = S.tx[i].date;
+          return d || null;
+        }
+        function mLabel(y, m) {
+          return MN[m - 1] + ' ' + String(y).replace(/\d/g, function (c) { return '۰۱۲۳۴۵۶۷۸۹'[c]; });
+        }
+        /* Month of the newest transaction, but only when it is not the month on screen. */
+        function jumpHint() {
+          var d = newestTx();
+          if (!d) return '';
+          var p = parts(d);
+          if (p.y === cur.y && p.m === cur.m) return '';
+          return (
+            '<div class="list" style="margin-top:10px"><div class="empty" style="padding:14px 16px">' +
+            'این ماه چیزی ثبت نشده است.<br>آخرین تراکنش شما ' +
+            sd(d) +
+            ' است.</div>' +
+            '<button class="r" data-jump="' +
+            d +
+            '"><div class="ic" style="background:var(--blue)22">↩</div><div class="m"><b>رفتن به ' +
+            mLabel(p.y, p.m) +
+            '</b></div></button></div>'
+          );
+        }
         function row(t) {
           var s = t.type === 'tf' ? ['⇄', '#8e8e93'] : STY[t.cat] || STY['سایر'];
           return (
@@ -616,7 +644,7 @@
             '<div class="list"><div class="t">آخرین تراکنش‌ها</div>' +
             (mt.length ? mt.slice(0, 5).map(row).join('') : '<div class="empty">این ماه تراکنشی ثبت نشده. با دکمه + شروع کنید.</div>') +
             '</div>';
-          return h;
+          return h + jumpHint();
         }
         function bRow(by, k) {
           var l = S.bud[k],
@@ -687,7 +715,16 @@
               (!q || foldFa((t.note || '') + ' ' + (t.cat || '') + ' ' + (t.p || '')).indexOf(qf) > -1)
             );
           });
-          if (!a.length) return h + '<div class="list"><div class="empty">تراکنشی پیدا نشد.</div></div>';
+          if (!a.length) {
+            var jh = jumpHint();
+            return (
+              h +
+              '<div class="list"><div class="empty">' +
+              (q || flt !== 'all' || aflt >= 0 ? 'تراکنشی پیدا نشد.' : 'این ماه تراکنشی ثبت نشد.') +
+              '</div></div>' +
+              (q || flt !== 'all' || aflt >= 0 ? '' : jh)
+            );
+          }
           var days = {};
           a.forEach(function (t) {
             (days[t.date] = days[t.date] || []).push(t);
@@ -2634,7 +2671,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
+            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -2651,6 +2688,14 @@
             cur.y = p[0];
             cur.m = p[1];
             render();
+          } else if (d.jump) {
+            var jp = parts(d.jump);
+            cur.y = jp.y;
+            cur.m = jp.m;
+            flt = 'all';
+            aflt = -1;
+            render();
+            scrollTo(0, 0);
           } else if (d.f) {
             flt = d.f;
             render();
@@ -2895,11 +2940,20 @@
               if (!j || !Array.isArray(j.tx)) throw 0;
               S = j;
               norm();
+              seedIds();
+              dedupeIds();
+              var nd = newestTx();
+              if (nd) cur = parts(nd);
+              flt = 'all';
+              aflt = -1;
               render();
               save();
-              toast('پشتیبان بازیابی شد', function () {
-                snapTo(pre.id, 'بازیابی برگشت خورد');
-              });
+              toast(
+                'پشتیبان بازیابی شد' + (nd ? ' — نمایش ' + mLabel(cur.y, cur.m) : ''),
+                function () {
+                  snapTo(pre.id, 'بازیابی برگشت خورد');
+                },
+              );
             } catch (x) {
               S = prev;
               snapDrop(pre.id);
