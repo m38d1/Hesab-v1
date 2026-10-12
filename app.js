@@ -89,6 +89,10 @@
             norm();
             loadBroken = true;
           }
+          /* Ids must be unique before anything can delete by id, and any duplicates left by
+             an older build are repaired here rather than silently collapsing rows later. */
+          seedIds();
+          if (dedupeIds()) save();
         }
         var loadBroken = false,
           lsGone = false;
@@ -160,6 +164,42 @@
           } catch (e) {}
           mirror();
           if (!syApplying) syDirty();
+        }
+        /* Date.now() has millisecond resolution, so two entries written in the same tick get
+           the same id — and deleting one then deletes every row sharing it. This generator
+           never repeats a value and is seeded from the data, so a restart cannot collide
+           with records written by an earlier session. */
+        var lastId = 0;
+        function nid() {
+          var t = Date.now();
+          lastId = t > lastId ? t : lastId + 1;
+          return lastId;
+        }
+        function seedIds() {
+          var max = 0;
+          ['tx', 'loans', 'goals', 'assets', 'debts', 'rec'].forEach(function (k) {
+            arr(S[k]).forEach(function (x) {
+              if (x && typeof x.id === 'number' && x.id > max) max = x.id;
+            });
+          });
+          if (max > lastId) lastId = max;
+        }
+        /* Older data (and rapid taps before this fix) can already contain duplicate ids.
+           Repair once per load, keeping the first record of each id untouched. */
+        function dedupeIds() {
+          var fixed = false;
+          ['tx', 'loans', 'goals', 'assets', 'debts', 'rec'].forEach(function (k) {
+            var seen = {};
+            arr(S[k]).forEach(function (x) {
+              if (!x) return;
+              if (typeof x.id !== 'number' || seen[x.id]) {
+                x.id = nid();
+                fixed = true;
+              }
+              seen[x.id] = 1;
+            });
+          });
+          return fixed;
         }
         /* ---------- Storage durability ----------
            localStorage holds the only copy of the ledger, and it is the first thing that
@@ -236,6 +276,8 @@
               if (!j || !Array.isArray(j.tx)) return false;
               S = j;
               norm();
+              seedIds();
+              dedupeIds();
               save();
               render();
               toast('داده‌ها از حافظه‌ی پشتیبان برگشت');
@@ -273,7 +315,7 @@
         function snapSave(label) {
           var a = snaps();
           a.unshift({
-            id: Date.now(),
+            id: nid(),
             l: label,
             tx: (S.tx || []).length,
             d: new Date().toISOString().slice(0, 10),
@@ -948,7 +990,7 @@
           if (k === 'gnew') {
             var n = ($('gn').value || '').trim();
             if (!n || !a) return;
-            S.goals.push({ id: Date.now(), name: n, target: a, saved: 0 });
+            S.goals.push({ id: nid(), name: n, target: a, saved: 0 });
           } else if (k === 'gsave' && g) {
             var gn = (($('gn') || {}).value || '').replace(/[<>&"]/g, '').trim(),
               gt = P(($('gt') || { value: '' }).value);
@@ -1036,7 +1078,7 @@
             var g = 0;
             while (r.next <= td && g++ < 60) {
               S.tx.push({
-                id: Date.now() + n++,
+                id: nid(),
                 type: r.type,
                 amount: r.amount,
                 cat: r.cat,
@@ -1208,7 +1250,7 @@
               Object.keys(rec).forEach(function (k2) {
                 l[k2] = rec[k2];
               });
-            } else S.loans.push(Object.assign({ id: Date.now() }, rec));
+            } else S.loans.push(Object.assign({ id: nid() }, rec));
           } else if (l) {
             if (k === 'ldel')
               S.loans = S.loans.filter(function (x) {
@@ -1216,7 +1258,7 @@
               });
             else if (k === 'lpay' && l.paid < l.count) {
               l.paid++;
-              S.tx.push({ id: Date.now(), type: 'out', amount: l.amount, cat: 'اقساط', acc: l.acc || 0, date: today(), note: l.name });
+              S.tx.push({ id: nid(), type: 'out', amount: l.amount, cat: 'اقساط', acc: l.acc || 0, date: today(), note: l.name });
               cur = parts(today());
             }
           }
@@ -1631,7 +1673,7 @@
               a.qty = q;
               a.price = p;
               a.cost = c;
-            } else S.assets.push({ id: Date.now(), name: n, qty: q, price: p, cost: c });
+            } else S.assets.push({ id: nid(), name: n, qty: q, price: p, cost: c });
           }
           save();
           closeSheet();
@@ -1818,7 +1860,7 @@
             if (!p || !a) return;
             if (S.ppl.indexOf(p) < 0) S.ppl.push(p);
             S.debts.push({
-              id: Date.now(),
+              id: nid(),
               p: p,
               s: dD === 'g' ? 1 : -1,
               amt: a,
@@ -1831,7 +1873,7 @@
           } else if (k === 'dsettle') {
             var b = bal(dP);
             if (b) {
-              S.debts.push({ id: Date.now(), p: dP, s: b > 0 ? -1 : 1, amt: Math.abs(b), date: today(), note: 'تسویه کامل' });
+              S.debts.push({ id: nid(), p: dP, s: b > 0 ? -1 : 1, amt: Math.abs(b), date: today(), note: 'تسویه کامل' });
               save();
               openPerson(dP);
               render();
@@ -2530,7 +2572,7 @@
             if (!r.on) return;
             var isTf = r.type === 'tf';
             S.tx.push({
-              id: Date.now() + n,
+              id: nid(),
               type: r.type,
               amount: r.amount,
               cat: isTf ? '' : r.cat,
@@ -2697,7 +2739,7 @@
               return;
             }
             var o = {
-              id: editId || Date.now(),
+              id: editId || nid(),
               type: sType,
               amount: a,
               cat: sType === 'tf' ? '' : $('fc').value,
@@ -2716,7 +2758,7 @@
             if (!editId && fr && fr.value !== '0' && sType !== 'tf') {
               var ad = parts(o.date).d;
               S.rec.push({
-                id: Date.now() + 1,
+                id: nid(),
                 type: sType,
                 amount: a,
                 cat: o.cat,
@@ -2795,7 +2837,7 @@
               return x.id === editId;
             })[0];
             if (t0) {
-              S.tx.push(Object.assign({}, t0, { id: Date.now(), date: today() }));
+              S.tx.push(Object.assign({}, t0, { id: nid(), date: today() }));
               cur = parts(today());
               save();
               closeSheet();
