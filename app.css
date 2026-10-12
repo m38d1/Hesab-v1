@@ -1037,3 +1037,29 @@
 .btn:disabled {
   opacity: 0.6;
 }
+/* Tap targets: the inline delete buttons were 19px wide, far below the 44px
+   minimum, which made destructive taps easy to miss on a phone. */
+[data-ad],
+[data-cd],
+[data-pdel],
+[data-dd],
+[data-rd],
+[data-sx] {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 !important;
+  font-size: 22px !important;
+  line-height: 1;
+  color: var(--red);
+  flex: none;
+  background: none;
+  border: 0;
+}
+/* The restore button sits in a compact row, so .btn's width:100% has to be undone. */
+[data-sr] {
+  width: auto;
+  min-height: 44px;
+  align-self: center;
+}

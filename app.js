@@ -156,6 +156,92 @@
           } catch (e) {}
           if (!syApplying) syDirty();
         }
+        /* ---------- Recovery points ----------
+           A snapshot is taken before every destructive action and once a day on boot, so a
+           bad edit, a bad restore or a mis-tap can be rolled back. Snapshots live in their own
+           localStorage key: they cost nothing until something goes wrong. */
+        var SNK = 'hesab-snap-v1',
+          SNAP_MAX = 8,
+          snapDay = '';
+        function snaps() {
+          try {
+            var a = JSON.parse(localStorage.getItem(SNK));
+            return Array.isArray(a) ? a : [];
+          } catch (e) {
+            return [];
+          }
+        }
+        function snapWrite(a) {
+          try {
+            localStorage.setItem(SNK, JSON.stringify(a));
+          } catch (e) {}
+        }
+        function snapSave(label) {
+          var a = snaps();
+          a.unshift({
+            id: Date.now(),
+            l: label,
+            tx: (S.tx || []).length,
+            d: new Date().toISOString().slice(0, 10),
+            s: JSON.parse(JSON.stringify(S)),
+          });
+          if (a.length > SNAP_MAX) a.length = SNAP_MAX;
+          snapWrite(a);
+          return a[0];
+        }
+        function snapFind(id) {
+          return snaps().filter(function (x) {
+            return x.id === id;
+          })[0];
+        }
+        /* Restore replaces the whole state, so it is the safety net for the actions that can
+           wipe everything. On any failure the previous state is put back. */
+        function snapTo(id, note) {
+          var x = snapFind(id);
+          if (!x) return false;
+          var prev = S;
+          S = x.s;
+          try {
+            norm();
+            render();
+            save();
+            toast(note || 'به حالت قبل برگشت');
+            return true;
+          } catch (e) {
+            S = prev;
+            norm();
+            return false;
+          }
+        }
+        /* Snapshot the current state, run a destructive action, then offer one-tap undo. */
+        function snapAct(label, fn) {
+          var s = snapSave(label);
+          fn();
+          toast(label, function () {
+            snapTo(s.id, 'برگشت خورد');
+          });
+        }
+        function snapDrop(id) {
+          snapWrite(
+            snaps().filter(function (x) {
+              return x.id !== id;
+            }),
+          );
+        }
+        function snapDaily() {
+          var d = new Date().toISOString().slice(0, 10);
+          if (snapDay === d) return;
+          snapDay = d;
+          var a = snaps();
+          if (!(a.length && a[0].l === 'خودکار' && a[0].d === d)) snapSave('خودکار');
+        }
+        function snapWhen(id) {
+          var ms = Date.now() - id;
+          var h = Math.floor(ms / 36e5);
+          if (h < 1) return 'همین حالا';
+          if (h < 24) return fr0(h) + ' ساعت پیش';
+          return fr0(Math.floor(h / 24)) + ' روز پیش';
+        }
         var PF = new Intl.DateTimeFormat('en-u-ca-persian-nu-latn', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC' }),
           PC = {};
         function parts(iso) {
@@ -506,6 +592,47 @@
             '</div>'
           );
         }
+        /* Recovery points: what is kept, how fresh it is, and a one-tap way back. */
+        function snapHtml() {
+          var a = snaps();
+          if (!a.length)
+            return (
+              '<div class="card"><h2>نقاط بازگشت<small>هنوز نقطه‌ای ثبت نشده</small></h2>' +
+              '<p class="empty" style="margin:0;text-align:right">قبل از هر کار مهمی (حذف، بازیابی، بازگردانی همه) یک نقطه‌ی بازگشت خودکار ساخته می‌شود.</p></div>'
+            );
+          var age = snapWhen(a[0].id),
+            warn = Date.now() - a[0].id > 3 * 864e5;
+          return (
+            '<div class="card"><h2>نقاط بازگشت<small>' +
+            fr0(a.length) +
+            ' نقطه · آخرین: ' +
+            age +
+            '</small></h2>' +
+            (warn
+              ? '<p style="margin:0 0 10px;font-size:12.5px;color:var(--org);line-height:1.7">بیش از ۳ روز از نقطه‌ی خودکار نگذشته. یک‌بار «نمایش پشتیبان برای کپی» را بزن و متنش را جایی امن نگه دار.</p>'
+              : '') +
+            '<p class="empty" style="margin:0 0 10px;text-align:right;font-size:12.5px">این نقاط فقط روی همین مرورگرند و جلوی اشتباه را می‌گیرند؛ برای ماندگاری باید پشتیبان بگیری.</p>' +
+            '<div class="list" style="margin:0">' +
+            a
+              .map(function (x) {
+                return (
+                  '<div class="r"><div class="m"><b>' +
+                  esc(x.l || '—') +
+                  '</b><small>' +
+                  fr0(x.tx || 0) +
+                  ' تراکنش · ' +
+                  snapWhen(x.id) +
+                  '</small></div><button class="btn g" data-sr="' +
+                  x.id +
+                  '" style="margin:0;padding:8px 14px;font-size:13px;flex:none">بازگردانی</button><button data-sx="' +
+                  x.id +
+                  '" aria-label="حذف نقطه بازگشت" style="color:var(--red);font-size:22px;padding:0 4px;flex:none">×</button></div>'
+                );
+              })
+              .join('') +
+            '</div></div>'
+          );
+        }
         function set() {
           return (
             '<div class="head"><h1>تنظیمات</h1></div>' +
@@ -530,6 +657,7 @@
             '<div class="card"><h2>پشتیبان‌گیری<small>' +
             fr0(S.tx.length) +
             ' تراکنش</small></h2><textarea id="bk" placeholder="برای بازیابی، متن پشتیبان را اینجا بچسبانید"></textarea><button class="btn g" data-x="exp">نمایش پشتیبان برای کپی</button><button class="btn g" data-x="imp">بازیابی از متن</button></div>' +
+            snapHtml() +
             '<div class="card"><button class="btn d" data-x="rst" style="margin:0">حذف همه داده‌ها</button></div><p class="empty">داده‌ها فقط روی همین مرورگر ذخیره می‌شوند.</p>'
           );
         }
@@ -839,7 +967,16 @@
           );
         }
         function pwaHtml() {
-          return '<div class="card"><h2>نصب روی گوشی</h2><p style="margin:0;font-size:14px;color:var(--mute);line-height:1.8">آیفون: در Safari دکمه «اشتراک‌گذاری» و سپس «Add to Home Screen». اندروید: منوی Chrome و سپس «Install app».</p></div>';
+          /* iOS erases script-writable storage for a site after 7 days without interaction,
+             unless the app is installed to the Home Screen. Say so plainly. */
+          var installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+          return (
+            '<div class="card"><h2>نصب روی گوشی</h2>' +
+            (installed
+              ? '<p style="margin:0;font-size:13.5px;color:var(--grn);line-height:1.8">برنامه نصب است، پس مرورگر داده‌هایش را خودبه‌خود پاک نمی‌کند.</p>'
+              : '<p style="margin:0 0 8px;font-size:13.5px;color:var(--org);line-height:1.9">اگر برنامه نصب نباشد، iOS بعد از ۷ روز بی‌استفاده‌ماندن، داده‌های سایت را خودش پاک می‌کند و همه‌ی تراکنش‌هایت می‌رود.<br>آیفون: در Safari دکمه «اشتراک‌گذاری» و سپس «Add to Home Screen». اندروید: منوی Chrome و سپس «Install app».</p>') +
+            '</div>'
+          );
         }
         function lNext(l) {
           var d = l.first,
@@ -2087,7 +2224,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-ar],[data-pdel],[data-asset],[data-debt],[data-dd],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
+            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-ar],[data-pdel],[data-sr],[data-sx],[data-asset],[data-debt],[data-dd],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -2139,9 +2276,11 @@
             render();
           } else if (d.ad) {
             if (AO(-1).length > 1) {
-              S.off.push(+d.ad);
-              save();
-              render();
+              snapAct('حساب «' + (ACCS[+d.ad] || '') + '» حذف شد', function () {
+                S.off.push(+d.ad);
+                save();
+                render();
+              });
             }
           } else if (d.ar) {
             S.off = S.off.filter(function (i) {
@@ -2150,8 +2289,15 @@
             save();
             render();
           } else if (d.pdel) {
-            S.ppl.splice(+d.pdel, 1);
-            save();
+            snapAct('شخص «' + (S.ppl[+d.pdel] || '') + '» حذف شد', function () {
+              S.ppl.splice(+d.pdel, 1);
+              save();
+              render();
+            });
+          } else if (d.sr) {
+            snapTo(+d.sr, 'به حالت قبل برگشت');
+          } else if (d.sx) {
+            snapDrop(+d.sx);
             render();
           } else if (d.asset) openAsset(+d.asset);
           else if (d.debt) openPerson(d.debt);
@@ -2186,10 +2332,12 @@
             render();
           } else if (d.cd) {
             var q2 = d.cd.split(',');
-            var gone = S.cl[q2[0]].splice(+q2[1], 1)[0];
-            if (gone && q2[0] === 'out') delete S.bud[gone.n];
-            save();
-            render();
+            snapAct('دسته «' + ((S.cl[q2[0]] || [])[+q2[1]] || {}).n + '» حذف شد', function () {
+              var gone = S.cl[q2[0]].splice(+q2[1], 1)[0];
+              if (gone && q2[0] === 'out') delete S.bud[gone.n];
+              save();
+              render();
+            });
           } else if (d.t) {
             S.theme = d.t;
             save();
@@ -2323,19 +2471,23 @@
             $('bk').value = JSON.stringify(S);
             $('bk').select();
           } else if (d.x === 'imp') {
+            /* Snapshot first: this is the one action that can replace the entire dataset. */
             var raw = $('bk').value,
-              prev = S;
+              prev = S,
+              pre = snapSave('پیش از بازیابی');
             try {
               var j = JSON.parse(raw);
               if (!j || !Array.isArray(j.tx)) throw 0;
-              /* Normalise before committing: a rejected backup must leave the current data intact. */
               S = j;
               norm();
               render();
               save();
-              toast('پشتیبان بازیابی شد');
+              toast('پشتیبان بازیابی شد', function () {
+                snapTo(pre.id, 'بازیابی برگشت خورد');
+              });
             } catch (x) {
               S = prev;
+              snapDrop(pre.id);
               $('bk').value = raw;
               $('bk').placeholder = 'متن پشتیبان معتبر نیست؛ داده‌های فعلی دست‌نخورده ماند.';
             }
@@ -2368,9 +2520,12 @@
           else if (/^syc-(merge|cloud|local)$/.test(d.x)) syResolve(d.x.slice(4));
           else if (d.x === 'rst') {
             if (el.dataset.s) {
-              S = { tx: [], bud: {}, theme: S.theme };
-              save();
-              render();
+              snapAct('همه داده‌ها حذف شد', function () {
+                S = { tx: [], bud: {}, theme: S.theme };
+                save();
+                render();
+              });
+              delete el.dataset.s;
             } else {
               el.dataset.s = 1;
               el.textContent = SY ? 'برای تأیید دوباره بزنید (نسخه ابری هم پاک می‌شود)' : 'برای تأیید دوباره بزنید';
@@ -2902,6 +3057,7 @@
         }
         load();
         runPending();
+        snapDaily();
         render();
         aniApp();
         syBoot();
