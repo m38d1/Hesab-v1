@@ -965,8 +965,8 @@
         }
         function nameBtn() {
           return (
-            '<button class="nm" data-x="name">حسابداری' +
-            (S.name ? ' ' + esc(S.name) : ' <span style="color:var(--blue);font-size:.65em">✎</span>') +
+            '<button class="nm" data-x="name">' +
+            (S.name ? esc(S.name) : 'حسابداری <span style="color:var(--blue);font-size:.65em">✎</span>') +
             '</button>'
           );
         }
