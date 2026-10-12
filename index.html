@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>حساب من</title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="حساب من" />
+    <meta name="theme-color" content="#007aff" />
+    <meta name="hesab-sync" content="off" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div class="wrap" id="app"></div>
+    <nav class="tabs">
+      <div class="bar glass" role="tablist" id="bar"></div>
+      <button class="plus glass" id="plus" aria-label="تراکنش جدید">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg>
+      </button>
+    </nav>
+    <div class="ov" id="ov"></div>
+    <div class="sh" id="sh" role="dialog" aria-modal="true"></div>
+    <div class="ov" id="cov" style="z-index: 12"></div>
+    <div class="cal" id="cal" role="dialog" aria-modal="true"></div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>
