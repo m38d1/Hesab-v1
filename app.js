@@ -1124,16 +1124,7 @@
           );
         }
         function pwaHtml() {
-          /* iOS erases script-writable storage for a site after 7 days without interaction,
-             unless the app is installed to the Home Screen. Say so plainly. */
-          var installed = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-          return (
-            '<div class="card"><h2>نصب روی گوشی</h2>' +
-            (installed
-              ? '<p style="margin:0;font-size:13.5px;color:var(--grn);line-height:1.8">برنامه نصب است، پس مرورگر داده‌هایش را خودبه‌خود پاک نمی‌کند.</p>'
-              : '<p style="margin:0 0 8px;font-size:13.5px;color:var(--org);line-height:1.9">اگر برنامه نصب نباشد، iOS بعد از ۷ روز بی‌استفاده‌ماندن، داده‌های سایت را خودش پاک می‌کند و همه‌ی تراکنش‌هایت می‌رود.<br>آیفون: در Safari دکمه «اشتراک‌گذاری» و سپس «Add to Home Screen». اندروید: منوی Chrome و سپس «Install app».</p>') +
-            '</div>'
-          );
+          return '<div class="card"><h2>نصب روی گوشی</h2><p style="margin:0;font-size:14px;color:var(--mute);line-height:1.8">آیفون: در Safari دکمه «اشتراک‌گذاری» و سپس «Add to Home Screen». اندروید: منوی Chrome و سپس «Install app».</p></div>';
         }
         function lNext(l) {
           var d = l.first,
@@ -1697,36 +1688,42 @@
               .map(function (p) {
                 return [p, bal(p)];
               })
-              .filter(function (r) {
-                return r[1] !== 0;
-              })
+              /* Settled people stay in the list: the ledger of what they borrowed and repaid
+                 is the record, and dropping them at zero loses that history. */
               .sort(function (a, b) {
+                if (!a[1] !== !b[1]) return a[1] ? -1 : 1;
+                if (!a[1] && !b[1]) return a[0] < b[0] ? -1 : 1;
                 return Math.abs(b[1]) - Math.abs(a[1]);
               }),
             own = 0,
-            owe = 0;
+            owe = 0,
+            settled = 0;
           rows.forEach(function (r) {
             if (r[1] > 0) own += r[1];
-            else owe -= r[1];
+            else if (r[1] < 0) owe -= r[1];
+            else settled++;
           });
           return (
             '<div class="list"><div class="t">طلب و بدهی' +
-            (rows.length ? ' · طلب ' + fa(own) + ' · بدهی ' + fa(owe) : '') +
+            (rows.length ? ' · طلب ' + fa(own) + ' · بدهی ' + fa(owe) + (settled ? ' · ' + fr0(settled) + ' تسویه' : '') : '') +
             '</div>' +
             rows
               .map(function (r) {
-                var m = r[1] > 0;
+                var m = r[1] > 0,
+                  z = !r[1];
                 return (
                   '<button class="r" data-debt="' +
                   esc(r[0]) +
-                  '"><div class="ic" style="background:var(--fill)">👤</div><div class="m"><b>' +
+                  '"' +
+                  (z ? ' style="opacity:.5"' : '') +
+                  '><div class="ic" style="background:var(--fill)">👤</div><div class="m"><b>' +
                   esc(r[0]) +
                   '</b><small>' +
-                  (m ? 'به شما بدهکار است' : 'شما بدهکارید') +
+                  (z ? 'تسویه شد' : m ? 'به شما بدهکار است' : 'شما بدهکارید') +
                   '</small></div><div class="v" style="color:' +
-                  (m ? 'var(--grn)' : 'var(--red)') +
+                  (z ? 'var(--mute)' : m ? 'var(--grn)' : 'var(--red)') +
                   '">' +
-                  fa(Math.abs(r[1])) +
+                  (z ? '۰' : fa(Math.abs(r[1]))) +
                   '</div></button>'
                 );
               })
@@ -2003,22 +2000,6 @@
               })
               .join('') +
             accAdd() +
-            (S.off.length
-              ? '<div class="t" style="margin-top:16px">حساب‌های حذف‌شده</div>' +
-                S.off
-                  .map(function (i) {
-                    return (
-                      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="flex:1;font-weight:500">' +
-                      esc(S.aem[i] || AIC[i] || '👛') +
-                      ' ' +
-                      esc(ACCS[i] || '') +
-                      '</b><button class="btn g" data-ar="' +
-                      i +
-                      '" style="margin:0;padding:8px 14px;font-size:13px">بازگرداندن</button></div>'
-                    );
-                  })
-                  .join('')
-              : '') +
             '</div>'
           );
         }
@@ -2598,7 +2579,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-ar],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
+            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -2656,12 +2637,6 @@
                 render();
               });
             }
-          } else if (d.ar) {
-            S.off = S.off.filter(function (i) {
-              return i !== +d.ar;
-            });
-            save();
-            render();
           } else if (d.pdel) {
             snapAct('شخص «' + (S.ppl[+d.pdel] || '') + '» حذف شد', function () {
               S.ppl.splice(+d.pdel, 1);
