@@ -62,7 +62,9 @@
         margin: 0;
         background: var(--bg);
         color: var(--ink);
-        font-family: -apple-system, 'Vazirmatn', Tahoma, sans-serif;
+        /* Vazirmatn must come first: -apple-system resolves to San Francisco, which on
+           iOS already covers Persian via SF Arabic and would win the fallback otherwise. */
+        font-family: 'Vazirmatn', -apple-system, Tahoma, sans-serif;
         line-height: 1.6;
         -webkit-font-smoothing: antialiased;
       }
