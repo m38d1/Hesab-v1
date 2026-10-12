@@ -1034,6 +1034,47 @@
   color: var(--mute);
   line-height: 1.8;
 }
+/* Swipe-to-delete reveal. The panel is a sibling of the row so the row's own
+   opaque card background paints over it; only the gap the swipe opens shows red. */
+.swipe-bg {
+  position: absolute;
+  overflow: hidden;
+  background: linear-gradient(to bottom, #ff5a4e, var(--red));
+  color: #fff;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+.swipe-ic {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scale(0.92);
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0;
+  transition:
+    opacity 0.12s linear,
+    transform 0.16s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.swipe-ic svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.swipe-ic.on {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
 .btn:disabled {
   opacity: 0.6;
 }

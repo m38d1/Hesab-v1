@@ -2100,8 +2100,48 @@
         document.addEventListener('pointerdown', function (e) {
           var r = e.target.closest && e.target.closest('.r[data-edit]');
           if (!r || e.button > 0) return;
-          sw = { r: r, x: e.clientX, y: e.clientY, on: false, dx: 0, b: 0 };
+          sw = { r: r, x: e.clientX, y: e.clientY, on: false, dx: 0, b: 0, bg: null };
         });
+        /* The red panel is a sibling placed before the row: the row keeps its opaque card
+           background and slides away from it, so the gap the swipe opens shows the delete
+           affordance underneath, the way iOS mail does. */
+        function swipeOpen(r) {
+          var p = r.parentNode;
+          if (!p) return null;
+          if (getComputedStyle(p).position === 'static') p.style.position = 'relative';
+          var pr = p.getBoundingClientRect(),
+            rr = r.getBoundingClientRect();
+          /* Match the card's own corner radius on edge rows so the red panel does not
+             poke out past the rounded corner; middle rows get a softer, smaller curve. */
+          var rows = Array.prototype.filter.call(p.children, function (el) {
+                return el.classList && el.classList.contains('r');
+              }),
+            at = rows.indexOf(r),
+            top = at === 0 ? 22 : 13,
+            bot = at === rows.length - 1 ? 22 : 13;
+          var b = document.createElement('div');
+          b.className = 'swipe-bg';
+          b.innerHTML =
+            '<span class="swipe-ic"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></svg>حذف</span>';
+          b.style.top = rr.top - pr.top + 'px';
+          b.style.height = rr.height + 'px';
+          b.style.left = rr.left - pr.left + 'px';
+          b.style.borderTopLeftRadius = top + 'px';
+          b.style.borderBottomLeftRadius = bot + 'px';
+          /* Both ends curved: the outer end follows the card corner, the inner end is a
+             soft edge so the strip reads as a shape instead of a painted block. */
+          b.style.borderTopRightRadius = '13px';
+          b.style.borderBottomRightRadius = '13px';
+          b.style.width = '0px';
+          p.insertBefore(b, r);
+          return b;
+        }
+        function swipeClose(r) {
+          if (r && r.__sw) {
+            r.__sw.remove();
+            r.__sw = null;
+          }
+        }
         document.addEventListener('pointermove', function (e) {
           if (!sw) return;
           var dx = e.clientX - sw.x,
@@ -2114,9 +2154,19 @@
             } else return;
           }
           sw.dx = Math.max(0, dx);
+          if (!sw.bg) {
+            sw.bg = swipeOpen(sw.r);
+            sw.r.__sw = sw.bg;
+          }
+          /* No cap: the panel always fills the gap exactly, however far the swipe goes. */
+          var W = sw.dx;
           sw.r.style.transition = 'none';
           sw.r.style.transform = 'translateX(' + sw.dx + 'px)';
-          sw.r.style.boxShadow = '-700px 0 0 0 var(--red)';
+          if (sw.bg) {
+            sw.bg.style.width = W + 'px';
+            var ic = sw.bg.firstChild;
+            if (ic) ic.className = 'swipe-ic' + (W > 46 ? ' on' : '');
+          }
           if (sw.dx > 110 && !sw.b) {
             sw.b = 1;
             buzz();
@@ -2134,13 +2184,20 @@
             r.style.transform = 'translateX(110%)';
             var id = +r.dataset.edit;
             setTimeout(function () {
+              swipeClose(r);
               delTx(id);
             }, 220);
           } else {
             r.style.transform = '';
+            if (s.bg) {
+              s.bg.style.transition = 'width .2s ease';
+              s.bg.style.width = '0px';
+              var ic = s.bg.firstChild;
+              if (ic) ic.className = 'swipe-ic';
+            }
             setTimeout(function () {
-              r.style.boxShadow = '';
-            }, 250);
+              swipeClose(r);
+            }, 220);
           }
         }
         document.addEventListener('pointerup', swEnd);
