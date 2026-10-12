@@ -69,30 +69,55 @@
           });
         };
         function load() {
+          var raw = null;
           try {
-            var s = JSON.parse(localStorage.getItem(KEY));
+            raw = localStorage.getItem(KEY);
+            var s = JSON.parse(raw);
             if (s && s.tx) S = s;
           } catch (e) {}
-          norm();
+          try {
+            norm();
+          } catch (e) {
+            /* An unreadable payload must not brick the app on boot: keep the raw text aside and start clean. */
+            try {
+              if (raw) localStorage.setItem(KEY + '-broken-' + Date.now(), raw);
+            } catch (e2) {}
+            S = { tx: [], bud: {}, theme: S.theme };
+            norm();
+            loadBroken = true;
+          }
+        }
+        var loadBroken = false;
+        function arr(v) {
+          return Array.isArray(v) ? v : [];
         }
         function norm() {
-          S.tx = (Array.isArray(S.tx) ? S.tx : []).filter(function (t) {
+          /* Every field is repaired here: a backup (or an older build) with a missing or
+             half-written field must never be able to crash a render. */
+          S.tx = arr(S.tx).filter(function (t) {
             return t && typeof t.amount === 'number' && isFinite(t.amount) && /^\d{4}-\d\d-\d\d$/.test(t.date);
           });
-          S.goals = S.goals || [];
-          S.ob = S.ob || [0, 0, 0];
-          S.accs = S.accs || ['نقد', 'حساب بانکی', 'کارت اعتباری'];
+          S.goals = arr(S.goals);
+          S.ob = arr(S.ob).map(Number);
+          S.accs = arr(S.accs).filter(function (n) {
+            return typeof n === 'string' && n.trim();
+          });
+          if (!S.accs.length) S.accs = ['نقد', 'حساب بانکی', 'کارت اعتباری'];
           ACCS = S.accs;
-          S.rec = S.rec || [];
-          S.loans = S.loans || [];
-          S.off = S.off || [];
-          S.ppl = S.ppl || [];
-          S.assets = S.assets || [];
-          S.debts = S.debts || [];
-          S.aem = S.aem || [];
+          S.rec = arr(S.rec);
+          S.loans = arr(S.loans);
+          S.off = arr(S.off).filter(function (i) {
+            return Number.isInteger(i) && i >= 0 && i < S.accs.length;
+          });
+          S.ppl = arr(S.ppl);
+          S.assets = arr(S.assets);
+          S.debts = arr(S.debts);
+          S.aem = arr(S.aem);
+          S.bud = S.bud && typeof S.bud === 'object' && !Array.isArray(S.bud) ? S.bud : {};
           while (S.ob.length < S.accs.length) S.ob.push(0);
-          S.unit = S.unit || 'T';
-          S.cats = S.cats || { out: [], in: [] };
+          S.unit = S.unit === 'R' ? 'R' : 'T';
+          S.cats =
+            S.cats && typeof S.cats === 'object' && !Array.isArray(S.cats) ? S.cats : { out: [], in: [] };
           if (!BASE0) {
             BASE0 = { out: CATS.out.slice(), in: CATS.in.slice() };
             BASE0.out.splice(BASE0.out.length - 1, 0, 'اقساط');
@@ -103,9 +128,10 @@
               },
             });
           }
-          if (!S.cl) {
-            S.cl = {};
-            ['out', 'in'].forEach(function (k) {
+          if (!S.cl || typeof S.cl !== 'object' || Array.isArray(S.cl)) S.cl = {};
+          ['out', 'in'].forEach(function (k) {
+            /* A backup may carry only one side of the list; rebuild just the missing half. */
+            if (!Array.isArray(S.cl[k]))
               S.cl[k] = BASE0[k]
                 .map(function (n) {
                   var s = STY[n] || ['•', '#8e8e93'];
@@ -116,8 +142,7 @@
                     return { n: c.n, e: c.e, c: '#8e8e93' };
                   }),
                 );
-            });
-          }
+          });
           ['out', 'in'].forEach(function (k) {
             CATS[k] = S.cl[k].map(function (c) {
               STY[c.n] = [c.e, c.c];
@@ -210,10 +235,10 @@
             '</div><div class="m"><b>' +
             esc(t.note || t.cat || 'انتقال بین حساب‌ها') +
             '</b><small>' +
-            (t.type === 'tf' ? 'انتقال' : t.cat) +
+            (t.type === 'tf' ? 'انتقال' : esc(t.cat || '')) +
             ' · ' +
-            ACCS[t.acc || 0] +
-            (t.type === 'tf' ? ' ← ' + ACCS[t.to || 0] : '') +
+            esc(ACCS[t.acc || 0] || '') +
+            (t.type === 'tf' ? ' ← ' + esc(ACCS[t.to || 0] || '') : '') +
             (t.p ? ' · 👤 ' + esc(t.p) : '') +
             '</small></div><div class="v ' +
             (t.type === 'in' ? 'i' : 'o') +
@@ -929,7 +954,7 @@
           return (
             sum(a, 'in') -
             sum(a, 'out') +
-            (S.ob[i] || 0) +
+            (+S.ob[i] || 0) +
             S.tx.reduce(function (s, t) {
               return t.type === 'tf' ? s + (t.to === i ? t.amount : 0) - ((t.acc || 0) === i ? t.amount : 0) : s;
             }, 0)
@@ -1241,7 +1266,7 @@
         }
         function assetsTotal() {
           return S.assets.reduce(function (s, a) {
-            return s + a.qty * a.price;
+            return s + (a.qty || 0) * (a.price || 0);
           }, 0);
         }
         function assetsHtml() {
@@ -1600,6 +1625,22 @@
               })
               .join('') +
             accAdd() +
+            (S.off.length
+              ? '<div class="t" style="margin-top:16px">حساب‌های حذف‌شده</div>' +
+                S.off
+                  .map(function (i) {
+                    return (
+                      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="flex:1;font-weight:500">' +
+                      esc(S.aem[i] || AIC[i] || '👛') +
+                      ' ' +
+                      esc(ACCS[i] || '') +
+                      '</b><button class="btn g" data-ar="' +
+                      i +
+                      '" style="margin:0;padding:8px 14px;font-size:13px">بازگرداندن</button></div>'
+                    );
+                  })
+                  .join('')
+              : '') +
             '</div>'
           );
         }
@@ -1894,15 +1935,19 @@
             if (pc === '*' || pc === 'x' || pc === 'X' || pc === '.' || nc === '.' || x[0].replace(/,/g, '').length > 13) continue;
             var ls = m.lastIndexOf('\n', i - 1) + 1,
               label = m.slice(Math.max(ls, i - 16), i).replace(/[:\-+\s]+$/, '');
-            if (SMS_NOT.test(label)) continue;
             var sign = nc === '-' || pc === '-' ? -1 : nc === '+' || pc === '+' ? 1 : 0;
             if (SMS_BAL.test(label)) {
               if (bal === null) bal = num;
               continue;
             }
+            /* An amount keyword wins over the identifier keywords: "برداشت از کارت" and
+               "انتقال به کارت" carry the amount right after the word "کارت". */
             if (SMS_AMT.test(label)) {
               if (!amt && num > 0) amt = { n: num, sign: sign, label: label };
-            } else if (!loose && (x[0].indexOf(',') > -1 || /^\s*(ریال|تومان)/.test(m.slice(j, j + 8))) && num > 0) loose = { n: num, sign: sign, label: label };
+              continue;
+            }
+            if (SMS_NOT.test(label)) continue;
+            if (!loose && (x[0].indexOf(',') > -1 || /^\s*(ریال|تومان)/.test(m.slice(j, j + 8))) && num > 0) loose = { n: num, sign: sign, label: label };
           }
           amt = amt || loose;
           if (!amt) return null;
@@ -2042,7 +2087,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
+            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-ar],[data-pdel],[data-asset],[data-debt],[data-dd],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -2098,6 +2143,12 @@
               save();
               render();
             }
+          } else if (d.ar) {
+            S.off = S.off.filter(function (i) {
+              return i !== +d.ar;
+            });
+            save();
+            render();
           } else if (d.pdel) {
             S.ppl.splice(+d.pdel, 1);
             save();
@@ -2272,15 +2323,21 @@
             $('bk').value = JSON.stringify(S);
             $('bk').select();
           } else if (d.x === 'imp') {
+            var raw = $('bk').value,
+              prev = S;
             try {
-              var j = JSON.parse($('bk').value);
-              if (!j.tx) throw 0;
+              var j = JSON.parse(raw);
+              if (!j || !Array.isArray(j.tx)) throw 0;
+              /* Normalise before committing: a rejected backup must leave the current data intact. */
               S = j;
-              save();
+              norm();
               render();
+              save();
+              toast('پشتیبان بازیابی شد');
             } catch (x) {
-              $('bk').value = '';
-              $('bk').placeholder = 'متن پشتیبان معتبر نیست.';
+              S = prev;
+              $('bk').value = raw;
+              $('bk').placeholder = 'متن پشتیبان معتبر نیست؛ داده‌های فعلی دست‌نخورده ماند.';
             }
           } else if (d.hide) {
             HIDE = !HIDE;
@@ -2327,10 +2384,13 @@
             t.value = v ? fr0(v) : '';
           } else if (t.id === 'q') {
             q = t.value;
+            /* Re-rendering mid-composition would destroy the Persian IME session. */
+            if (e.isComposing) return;
             var p = t.selectionStart;
             render();
             var n = $('q');
-            n.focus();
+            if (!n) return;
+            n.focus({ preventScroll: true });
             n.setSelectionRange(p, p);
           } else if (t.dataset.b) {
             var cap = P(t.value);
@@ -2845,6 +2905,7 @@
         render();
         aniApp();
         syBoot();
+        if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
       })();
 
     if ('serviceWorker' in navigator)
