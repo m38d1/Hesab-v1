@@ -778,6 +778,61 @@
             '<button class="btn g" data-x="persists" style="margin-top:10px">درخواست ذخیره‌سازی پایدار</button></div>'
           );
         }
+        /* ---------- JSON file import / export ---------- */
+        function saveBlob(text, name, type) {
+          try {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([text], { type: type }));
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(function () {
+              URL.revokeObjectURL(a.href);
+            }, 3000);
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+        function exportJson() {
+          var name = 'hesab-backup-' + today() + '.json',
+            txt = JSON.stringify(S, null, 1);
+          if (!saveBlob(txt, name, 'application/json;charset=utf-8')) {
+            $('bk').value = txt;
+            $('bk').select();
+          }
+        }
+        /* The file only fills the box; restoring is still a separate, confirmable press,
+           so a wrong file never silently replaces the ledger. */
+        function importJsonFile(file) {
+          if (!file) return;
+          if (file.size > 12 * 1024 * 1024) {
+            toast('فایل خیلی بزرگ است');
+            return;
+          }
+          var fr = new FileReader();
+          fr.onerror = function () {
+            toast('فایل خوانده نشد');
+          };
+          fr.onload = function () {
+            var txt = String(fr.result || '');
+            var okJson = false;
+            try {
+              var j = JSON.parse(txt);
+              okJson = j && Array.isArray(j.tx);
+            } catch (e) {}
+            $('bk').value = txt;
+            if (!okJson) {
+              $('bk').placeholder = 'محتوای فایل معتبر نیست؛ داده‌های فعلی دست‌نخورده ماند.';
+              toast('این فایل قالب برنامه را ندارد');
+              return;
+            }
+            $('bk').placeholder = 'فایل خوانده شد؛ برای بازیابی دکمه را بزن.';
+            toast('فایل خوانده شد؛ برای بازیابی «بازیابی» را بزن');
+          };
+          fr.readAsText(file);
+        }
         function set() {
           return (
             '<div class="head"><h1>تنظیمات</h1></div>' +
@@ -802,7 +857,7 @@
             exportHtml() +
             '<div class="card"><h2>پشتیبان‌گیری<small>' +
             fr0(S.tx.length) +
-            ' تراکنش</small></h2><textarea id="bk" placeholder="برای بازیابی، متن پشتیبان را اینجا بچسبانید"></textarea><button class="btn g" data-x="exp">نمایش پشتیبان برای کپی</button><button class="btn g" data-x="imp">بازیابی از متن</button></div>' +
+            ' تراکنش</small></h2><div style="display:flex;gap:6px;margin-bottom:10px"><button class="btn g" data-x="dljson" style="margin:0;flex:1;font-size:14px;padding:11px 8px">دانلود فایل JSON</button><button class="btn g" data-x="upjson" style="margin:0;flex:1;font-size:14px;padding:11px 8px">خواندن فایل JSON</button></div><textarea id="bk" placeholder="یا متن پشتیبان را اینجا بچسبانید"></textarea><button class="btn g" data-x="exp">نمایش پشتیبان برای کپی</button><button class="btn g" data-x="imp">بازیابی</button><input type="file" id="bf" accept=".json,application/json,text/json" hidden></div>' +
             '<div class="card"><button class="btn d" data-x="rst" style="margin:0">حذف همه داده‌ها</button></div><p class="empty">داده‌ها فقط روی همین مرورگر ذخیره می‌شوند.</p>'
           );
         }
@@ -2822,6 +2877,11 @@
             var di = editId;
             closeSheet();
             delTx(di);
+          } else if (d.x === 'dljson') {
+            exportJson();
+          } else if (d.x === 'upjson') {
+            var bf = $('bf');
+            if (bf) bf.click();
           } else if (d.x === 'exp') {
             $('bk').value = JSON.stringify(S);
             $('bk').select();
@@ -2917,7 +2977,8 @@
         });
         document.addEventListener('change', function (e) {
           var t = e.target;
-          if (t.dataset.si !== undefined) smsList[+t.dataset.si].on = t.checked;
+          if (t.id === 'bf') importJsonFile(t.files && t.files[0]);
+          else if (t.dataset.si !== undefined) smsList[+t.dataset.si].on = t.checked;
           else if (t.dataset.sty !== undefined) {
             var si = +t.dataset.sty;
             smsList[si].type = t.value;
