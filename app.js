@@ -372,17 +372,23 @@
           return fr0(Math.floor(h / 24)) + ' روز پیش';
         }
         var PF = new Intl.DateTimeFormat('en-u-ca-persian-nu-latn', { year: 'numeric', month: 'numeric', day: 'numeric', timeZone: 'UTC' }),
-          PC = {};
+          PC = Object.create(null);
+        /* Always hand back a fresh object. Callers keep a reference to the result and write to it
+           (cur is navigated month by month), so returning the cached instance would let a month
+           change rewrite the cached calendar entry, and inM() would then compare an object with
+           itself and match every month. */
         function parts(iso) {
           var c = PC[iso];
-          if (c) return c;
-          var o = {};
-          var dt = new Date(iso + 'T12:00:00Z');
-          if (isNaN(dt)) return parts(today());
-          PF.formatToParts(dt).forEach(function (x) {
-            o[x.type] = x.value;
-          });
-          return (PC[iso] = { y: +o.year, m: +o.month, d: +o.day });
+          if (!c) {
+            var o = {};
+            var dt = new Date(iso + 'T12:00:00Z');
+            if (isNaN(dt)) return parts(today());
+            PF.formatToParts(dt).forEach(function (x) {
+              o[x.type] = x.value;
+            });
+            c = PC[iso] = { y: +o.year, m: +o.month, d: +o.day };
+          }
+          return { y: c.y, m: c.m, d: c.d };
         }
         function today() {
           var d = new Date();
