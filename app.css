@@ -1043,8 +1043,7 @@
 [data-cd],
 [data-pdel],
 [data-dd],
-[data-rd],
-[data-sx] {
+[data-rd] {
   min-width: 44px;
   min-height: 44px;
   display: inline-grid;
@@ -1056,10 +1055,4 @@
   flex: none;
   background: none;
   border: 0;
-}
-/* The restore button sits in a compact row, so .btn's width:100% has to be undone. */
-[data-sr] {
-  width: auto;
-  min-height: 44px;
-  align-self: center;
 }

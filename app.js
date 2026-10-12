@@ -72,9 +72,12 @@
           var raw = null;
           try {
             raw = localStorage.getItem(KEY);
+            lsGone = raw == null;
             var s = JSON.parse(raw);
             if (s && s.tx) S = s;
-          } catch (e) {}
+          } catch (e) {
+            lsGone = true;
+          }
           try {
             norm();
           } catch (e) {
@@ -87,7 +90,8 @@
             loadBroken = true;
           }
         }
-        var loadBroken = false;
+        var loadBroken = false,
+          lsGone = false;
         function arr(v) {
           return Array.isArray(v) ? v : [];
         }
@@ -154,15 +158,105 @@
           try {
             localStorage.setItem(KEY, JSON.stringify(S));
           } catch (e) {}
+          mirror();
           if (!syApplying) syDirty();
+        }
+        /* ---------- Storage durability ----------
+           localStorage holds the only copy of the ledger, and it is the first thing that
+           goes when site data is cleared. An IndexedDB mirror is a separate store, so if
+           localStorage ever comes back empty the data can be put back. */
+        var MIR = 'hesab-mirror-v1',
+          mirT = null,
+          mirrorAt = 0;
+        function mirDb() {
+          return new Promise(function (res) {
+            var rq;
+            try {
+              rq = indexedDB.open(MIR, 1);
+            } catch (e) {
+              return res(null);
+            }
+            rq.onupgradeneeded = function () {
+              rq.result.createObjectStore('kv');
+            };
+            rq.onsuccess = function () {
+              res(rq.result);
+            };
+            rq.onerror = function () {
+              res(null);
+            };
+          });
+        }
+        function mirror() {
+          if (mirT) return;
+          mirT = setTimeout(function () {
+            mirT = null;
+            var raw;
+            try {
+              raw = JSON.stringify(S);
+            } catch (e) {
+              return;
+            }
+            mirDb().then(function (db) {
+              if (!db) return;
+              try {
+                db.transaction('kv', 'readwrite').objectStore('kv').put({ t: Date.now(), raw: raw }, 'state');
+              } catch (e) {}
+            });
+            mirrorAt = Date.now();
+          }, 700);
+        }
+        function mirrorGet() {
+          return mirDb().then(function (db) {
+            if (!db) return null;
+            return new Promise(function (res) {
+              try {
+                var rq = db.transaction('kv', 'readonly').objectStore('kv').get('state');
+                rq.onsuccess = function () {
+                  res(rq.result || null);
+                };
+                rq.onerror = function () {
+                  res(null);
+                };
+              } catch (e) {
+                res(null);
+              }
+            });
+          });
+        }
+        /* Boot: localStorage wiped entirely but the mirror still has data means the main
+           store was cleared. Only trigger on a genuinely missing key: a legitimately empty
+           ledger must never be "rescued" over by a stale mirror. */
+        function mirrorRescue() {
+          if (!lsGone) return Promise.resolve(false);
+          return mirrorGet().then(function (m) {
+            if (!m || !m.raw) return false;
+            try {
+              var j = JSON.parse(m.raw);
+              if (!j || !Array.isArray(j.tx)) return false;
+              S = j;
+              norm();
+              save();
+              render();
+              toast('داده‌ها از حافظه‌ی پشتیبان برگشت');
+              return true;
+            } catch (e) {
+              return false;
+            }
+          });
+        }
+        function storageInfo() {
+          return Promise.all([
+            navigator.storage && navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(false),
+            navigator.storage && navigator.storage.estimate ? navigator.storage.estimate() : Promise.resolve(null),
+          ]);
         }
         /* ---------- Recovery points ----------
            A snapshot is taken before every destructive action and once a day on boot, so a
            bad edit, a bad restore or a mis-tap can be rolled back. Snapshots live in their own
            localStorage key: they cost nothing until something goes wrong. */
         var SNK = 'hesab-snap-v1',
-          SNAP_MAX = 8,
-          snapDay = '';
+          SNAP_MAX = 8;
         function snaps() {
           try {
             var a = JSON.parse(localStorage.getItem(SNK));
@@ -228,13 +322,6 @@
             }),
           );
         }
-        function snapDaily() {
-          var d = new Date().toISOString().slice(0, 10);
-          if (snapDay === d) return;
-          snapDay = d;
-          var a = snaps();
-          if (!(a.length && a[0].l === 'خودکار' && a[0].d === d)) snapSave('خودکار');
-        }
         function snapWhen(id) {
           var ms = Date.now() - id;
           var h = Math.floor(ms / 36e5);
@@ -263,6 +350,25 @@
         function sd(iso) {
           var dt = new Date(iso + 'T12:00:00Z');
           return isNaN(dt) ? '' : SF.format(dt);
+        }
+        /* Search normalisation: Persian text typed on different keyboards, with Persian or ASCII
+           digits, with or without ZWNJ, must still match. Display text is never changed. */
+        function foldFa(s) {
+          return String(s == null ? '' : s)
+            .replace(/[يى]/g, 'ی')
+            .replace(/ك/g, 'ک')
+            .replace(/[أإآٱ]/g, 'ا')
+            .replace(/[ؤئ]/g, 'ی')
+            .replace(/ۀ/g, 'ه')
+            .replace(/[ً-ْٰـ]/g, '')
+            .replace(/[۰-۹]/g, function (d) {
+              return String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+            })
+            .replace(/[٠-٩]/g, function (d) {
+              return String('٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+            })
+            .replace(/‌|‏|‎/g, '')
+            .toLowerCase();
         }
         function digits(s) {
           return s
@@ -525,6 +631,7 @@
               })
               .join('') +
             '</div>';
+          var qf = foldFa(q);
           var a = (
             q
               ? S.tx.slice().sort(function (a, b) {
@@ -535,7 +642,7 @@
             return (
               (flt === 'all' || t.type === flt) &&
               (aflt < 0 || (t.acc || 0) === aflt) &&
-              (!q || (t.note + ' ' + t.cat + ' ' + (t.p || '')).indexOf(q) > -1)
+              (!q || foldFa((t.note || '') + ' ' + (t.cat || '') + ' ' + (t.p || '')).indexOf(qf) > -1)
             );
           });
           if (!a.length) return h + '<div class="list"><div class="empty">تراکنشی پیدا نشد.</div></div>';
@@ -592,45 +699,41 @@
             '</div>'
           );
         }
-        /* Recovery points: what is kept, how fresh it is, and a one-tap way back. */
-        function snapHtml() {
-          var a = snaps();
-          if (!a.length)
-            return (
-              '<div class="card"><h2>نقاط بازگشت<small>هنوز نقطه‌ای ثبت نشده</small></h2>' +
-              '<p class="empty" style="margin:0;text-align:right">قبل از هر کار مهمی (حذف، بازیابی، بازگردانی همه) یک نقطه‌ی بازگشت خودکار ساخته می‌شود.</p></div>'
-            );
-          var age = snapWhen(a[0].id),
-            warn = Date.now() - a[0].id > 3 * 864e5;
+        /* Storage durability: how much room is left, whether the browser will protect the data,
+           and when the IndexedDB mirror last ran. */
+        var stOk = false,
+          stEst = null;
+        function storageHtml(ok, est) {
+          var used = est && est.usage ? est.usage : 0,
+            quota = est && est.quota ? est.quota : 0,
+            mb = function (n) {
+              return n > 1048576 ? fr0(Math.round(n / 1048576)) + ' مگابایت' : fr0(Math.round(n / 1024)) + ' کیلوبایت';
+            },
+            pct = quota ? Math.min(100, Math.max(0.6, (used / quota) * 100)) : 0,
+            ago = mirrorAt ? snapWhen(mirrorAt) : 'هنوز نه';
           return (
-            '<div class="card"><h2>نقاط بازگشت<small>' +
-            fr0(a.length) +
-            ' نقطه · آخرین: ' +
-            age +
-            '</small></h2>' +
-            (warn
-              ? '<p style="margin:0 0 10px;font-size:12.5px;color:var(--org);line-height:1.7">بیش از ۳ روز از نقطه‌ی خودکار نگذشته. یک‌بار «نمایش پشتیبان برای کپی» را بزن و متنش را جایی امن نگه دار.</p>'
-              : '') +
-            '<p class="empty" style="margin:0 0 10px;text-align:right;font-size:12.5px">این نقاط فقط روی همین مرورگرند و جلوی اشتباه را می‌گیرند؛ برای ماندگاری باید پشتیبان بگیری.</p>' +
-            '<div class="list" style="margin:0">' +
-            a
-              .map(function (x) {
-                return (
-                  '<div class="r"><div class="m"><b>' +
-                  esc(x.l || '—') +
-                  '</b><small>' +
-                  fr0(x.tx || 0) +
-                  ' تراکنش · ' +
-                  snapWhen(x.id) +
-                  '</small></div><button class="btn g" data-sr="' +
-                  x.id +
-                  '" style="margin:0;padding:8px 14px;font-size:13px;flex:none">بازگردانی</button><button data-sx="' +
-                  x.id +
-                  '" aria-label="حذف نقطه بازگشت" style="color:var(--red);font-size:22px;padding:0 4px;flex:none">×</button></div>'
-                );
-              })
-              .join('') +
-            '</div></div>'
+            '<div class="card"><h2>حافظه<small>نگه‌داری داده در مرورگر</small></h2>' +
+            '<div class="ins" style="margin:0 0 10px"><div><b>' +
+            mb(used) +
+            '</b><small>حجم داده</small></div><div><b>' +
+            (quota ? fr0(Math.round(pct * 10) / 10) + '٪' : '—') +
+            '</b><small>از فضای مجاز</small></div><div><b style="color:' +
+            (ok ? 'var(--grn)' : 'var(--org)') +
+            '">' +
+            (ok ? 'فعال' : 'خیر') +
+            '</b><small>ذخیره‌سازی پایدار</small></div></div>' +
+            '<div class="prog"><i style="width:' +
+            pct +
+            '%;background:' +
+            (ok ? 'var(--grn)' : 'var(--org)') +
+            '"></i></div>' +
+            (ok
+              ? ''
+              : '<p style="margin:10px 0 0;font-size:12.5px;color:var(--mute);line-height:1.8">مرورگر هنوز این داده را «پایدار» نکرده، یعنی در فشار فضا ممکن است پاکش کند. اگر برنامه را به صفحه‌ی اصلی اضافه کنی، مرورگر آن را نگه می‌دارد.</p>') +
+            '<p style="margin:8px 0 0;font-size:12.5px;color:var(--mute);line-height:1.8">یک کپی داده در IndexedDB نگه داشته می‌شود؛ اگر حافظه‌ی مرورگر خالی شد، برنامه سراغ آن می‌رود. آخرین همگام‌سازی: ' +
+            ago +
+            '.</p>' +
+            '<button class="btn g" data-x="persists" style="margin-top:10px">درخواست ذخیره‌سازی پایدار</button></div>'
           );
         }
         function set() {
@@ -651,13 +754,13 @@
             swatches() +
             '</div>' +
             pwaHtml() +
+            storageHtml(stOk, stEst) +
             recHtml() +
             pplHtml() +
             exportHtml() +
             '<div class="card"><h2>پشتیبان‌گیری<small>' +
             fr0(S.tx.length) +
             ' تراکنش</small></h2><textarea id="bk" placeholder="برای بازیابی، متن پشتیبان را اینجا بچسبانید"></textarea><button class="btn g" data-x="exp">نمایش پشتیبان برای کپی</button><button class="btn g" data-x="imp">بازیابی از متن</button></div>' +
-            snapHtml() +
             '<div class="card"><button class="btn d" data-x="rst" style="margin:0">حذف همه داده‌ها</button></div><p class="empty">داده‌ها فقط روی همین مرورگر ذخیره می‌شوند.</p>'
           );
         }
@@ -828,7 +931,12 @@
             (g ? esc(g.name) : 'هدف جدید') +
             '</h3>' +
             (g
-              ? '<div class="fld"><label>مبلغ<input id="ga" class="amt" inputmode="numeric" placeholder="۰"></label></div><button class="btn" data-x="gadd">افزودن به هدف</button><button class="btn g" data-x="gsub">برداشت از هدف</button><button class="btn d" data-x="gdel">حذف هدف</button>'
+              ? '<div class="fld"><label>مبلغ<input id="ga" class="amt" inputmode="numeric" placeholder="۰"></label></div><button class="btn" data-x="gadd">افزودن به هدف</button><button class="btn g" data-x="gsub">برداشت از هدف</button>' +
+                '<div class="t" style="margin:14px 0 6px">ویرایش</div><div class="fld"><label>نام هدف<input id="gn" placeholder="مثلاً سفر" value="' +
+                esc(g.name) +
+                '" style="direction:rtl;text-align:left"></label><label>مبلغ هدف<input id="gt" class="amt" inputmode="numeric" placeholder="۰" value="' +
+                fi(g.target) +
+                '"></label></div><button class="btn" data-x="gsave">ذخیره‌ی تغییرات</button><button class="btn d" data-x="gdel">حذف هدف</button>'
               : '<div class="fld"><label>نام هدف<input id="gn" placeholder="مثلاً سفر" style="direction:rtl;text-align:left"></label><label>مبلغ هدف<input id="ga" class="amt" inputmode="numeric" placeholder="۰"></label></div><button class="btn" data-x="gnew">ذخیره</button>');
           showSheet();
         }
@@ -841,6 +949,13 @@
             var n = ($('gn').value || '').trim();
             if (!n || !a) return;
             S.goals.push({ id: Date.now(), name: n, target: a, saved: 0 });
+          } else if (k === 'gsave' && g) {
+            var gn = (($('gn') || {}).value || '').replace(/[<>&"]/g, '').trim(),
+              gt = P(($('gt') || { value: '' }).value);
+            if (!gn || !gt) return;
+            g.name = gn;
+            g.target = gt;
+            if (g.saved > gt) g.saved = gt;
           } else if (g) {
             if (k === 'gdel')
               S.goals = S.goals.filter(function (x) {
@@ -1040,28 +1155,60 @@
                 fr0(l.count) +
                 '</b></label></div>' +
                 (l.paid < l.count ? '<button class="btn" data-x="lpay">ثبت پرداخت قسط</button>' : '') +
-                '<button class="btn d" data-x="ldel">حذف وام</button>'
-              : '<div class="fld"><label>نام وام<input id="ln" placeholder="مثلاً وام خودرو" style="direction:rtl;text-align:left"></label><label>مبلغ هر قسط<input id="la" class="amt" inputmode="numeric" placeholder="۰"></label><label>تعداد اقساط<input id="lc" inputmode="numeric" placeholder="۱۲"></label><label>قسط‌های پرداخت‌شده<input id="lp" inputmode="numeric" placeholder="۰"></label><label>تاریخ اولین قسط<button type="button" id="fd" data-x="cal" style="color:var(--blue);font-weight:600;font-size:16px"></button></label><label>حساب پرداخت<select id="lk">' +
-                AO(-1)
-                  .map(function (i) {
-                    return '<option value="' + i + '">' + ACCS[i] + '</option>';
-                  })
-                  .join('') +
-                '</select></label></div><button class="btn" data-x="lnew">ذخیره</button>');
+                '<div class="t" style="margin:14px 0 6px">ویرایش</div>'
+              : '') +
+            '<div class="fld"><label>نام وام<input id="ln" placeholder="مثلاً وام خودرو" value="' +
+            esc(l ? l.name : '') +
+            '" style="direction:rtl;text-align:left"></label><label>مبلغ هر قسط<input id="la" class="amt" inputmode="numeric" placeholder="۰" value="' +
+            (l ? fi(l.amount) : '') +
+            '"></label><label>تعداد اقساط<input id="lc" inputmode="numeric" placeholder="۱۲" value="' +
+            (l ? fr0(l.count) : '') +
+            '"></label><label>قسط‌های پرداخت‌شده<input id="lp" inputmode="numeric" placeholder="۰" value="' +
+            (l ? fr0(l.paid) : '') +
+            '"></label><label>تاریخ اولین قسط<button type="button" id="fd" data-x="cal" style="color:var(--blue);font-weight:600;font-size:16px"></button></label><label>حساب پرداخت<select id="lk">' +
+            AO(-1)
+              .map(function (i) {
+                return (
+                  '<option value="' +
+                  i +
+                  '"' +
+                  ((l ? l.acc || 0 : AO(-1)[0]) === i ? ' selected' : '') +
+                  '>' +
+                  esc(ACCS[i]) +
+                  '</option>'
+                );
+              })
+              .join('') +
+            '</select></label></div>' +
+            (l
+              ? '<button class="btn" data-x="lsave">ذخیره‌ی تغییرات</button><button class="btn d" data-x="ldel">حذف وام</button>'
+              : '<button class="btn" data-x="lnew">ذخیره</button>');
           showSheet();
-          if (!l) dateSel(today());
+          dateSel(l ? l.first : today());
         }
         function loanAct(k) {
           var l = S.loans.filter(function (x) {
             return x.id === editId;
           })[0];
-          if (k === 'lnew') {
+          if (k === 'lnew' || k === 'lsave') {
             var n = ($('ln').value || '').replace(/[<>&"]/g, '').trim(),
               a = P($('la').value),
               c = parseInt(digits($('lc').value), 10) || 0,
               p = parseInt(digits($('lp').value), 10) || 0;
             if (!n || !a || !c) return;
-            S.loans.push({ id: Date.now(), name: n, amount: a, count: c, paid: Math.min(p, c), first: getDate(), acc: +$('lk').value });
+            /* paid can never exceed the new count, and the start date is a real date */
+            var rec = { name: n, amount: a, count: c, paid: Math.min(Math.max(0, p), c), first: getDate(), acc: +$('lk').value };
+            if (k === 'lsave' && l) {
+              /* instalments already posted for this loan follow the new amount */
+              if (l.amount !== a) {
+                S.tx.forEach(function (t) {
+                  if (t.cat === 'اقساط' && t.note === l.name && t.amount === l.amount) t.amount = a;
+                });
+              }
+              Object.keys(rec).forEach(function (k2) {
+                l[k2] = rec[k2];
+              });
+            } else S.loans.push(Object.assign({ id: Date.now() }, rec));
           } else if (l) {
             if (k === 'ldel')
               S.loans = S.loans.filter(function (x) {
@@ -1570,12 +1717,14 @@
                 return (
                   '<div class="r"><div class="ic" style="background:var(--fill)">' +
                   (x.s > 0 ? '↗' : '↙') +
-                  '</div><div class="m"><b>' +
+                  '</div><button data-de="' +
+                  x.id +
+                  '" style="flex:1;min-width:0;text-align:right;background:none;border:0;padding:0"><b>' +
                   (x.s > 0 ? 'دادم' : 'گرفتم') +
                   (x.note ? ' · ' + esc(x.note) : '') +
                   '</b><small>' +
                   sd(x.date) +
-                  '</small></div><div class="v">' +
+                  '</small></button><div class="v">' +
                   fa(x.amt) +
                   '</div><button data-dd="' +
                   x.id +
@@ -1612,8 +1761,58 @@
           showSheet();
           dateSel(today());
         }
+        function openDebtEntry(id) {
+          var x = S.debts.filter(function (y) {
+            return y.id === id;
+          })[0];
+          if (!x) return;
+          editId = id;
+          dP = x.p;
+          $('sh').innerHTML =
+            '<div class="grab"></div><h3>ویرایش ' +
+            (x.s > 0 ? '«دادم»' : '«گرفتم»') +
+            '</h3>' +
+            '<div class="fld"><label>شخص<b>' +
+            esc(x.p) +
+            '</b></label><label>مبلغ<input id="da" class="amt" inputmode="numeric" placeholder="۰" value="' +
+            fi(x.amt) +
+            '"></label><label>تاریخ<button type="button" id="fd" data-x="cal" style="color:var(--blue);font-weight:600;font-size:16px"></button></label><label>جهت<select id="dsd">' +
+            '<option value="1"' +
+            (x.s > 0 ? ' selected' : '') +
+            '>دادم (او به من بدهکار شد)</option><option value="-1"' +
+            (x.s < 0 ? ' selected' : '') +
+            '>گرفتم (من بدهکار شدم)</option></select></label><label>توضیح<input id="dn" placeholder="اختیاری" value="' +
+            esc(x.note || '') +
+            '" style="direction:rtl;text-align:left"></label></div><button class="btn" data-x="desave">ذخیره‌ی تغییرات</button><button class="btn d" data-x="dedel">حذف این ردیف</button>';
+          showSheet();
+          dateSel(x.date);
+        }
         function debtAct(k) {
-          if (k === 'dsave') {
+          if (k === 'desave') {
+            var ex = S.debts.filter(function (y) {
+              return y.id === editId;
+            })[0];
+            if (!ex) return;
+            var am = P($('da').value),
+              nte = ($('dn').value || '').replace(/[<>&"]/g, '').trim();
+            if (!am) return;
+            ex.amt = am;
+            ex.date = getDate();
+            ex.s = +$('dsd').value;
+            ex.note = nte;
+            save();
+            openPerson(ex.p);
+            render();
+          } else if (k === 'dedel') {
+            snapAct('ردیف طلب/بدهی حذف شد', function () {
+              S.debts = S.debts.filter(function (y) {
+                return y.id !== editId;
+              });
+              save();
+              openPerson(dP);
+              render();
+            });
+          } else if (k === 'dsave') {
             var p = dP || ($('dpn') ? $('dpn').value : '').replace(/[<>&"]/g, '').trim() || ($('dps') ? $('dps').value : ''),
               a = P($('da').value);
             if (!p || !a) return;
@@ -1859,7 +2058,7 @@
           void a.offsetWidth;
           a.classList.add('ani');
         }
-        function toast(msg, undo) {
+        function toast(msg, undo, label) {
           var el = document.getElementById('toast');
           if (!el) {
             el = document.createElement('div');
@@ -1867,7 +2066,7 @@
             document.body.appendChild(el);
           }
           el.className = 'toast glass';
-          el.innerHTML = '<span>' + msg + '</span>' + (undo ? '<button id="tu">برگردان</button>' : '');
+          el.innerHTML = '<span>' + msg + '</span>' + (undo ? '<button id="tu">' + (label || 'برگردان') + '</button>' : '');
           void el.offsetWidth;
           el.classList.add('on');
           clearTimeout(tmr);
@@ -1879,7 +2078,7 @@
           }
           tmr = setTimeout(function () {
             el.classList.remove('on');
-          }, 5000);
+          }, undo && label === 'برگردان' ? 5000 : 15000);
         }
         function delTx(id) {
           var t = S.tx.filter(function (x) {
@@ -2172,6 +2371,7 @@
             openSheet();
           } else smsReview(items);
         }
+        /* The parser has to guess the direction of a message; this is where the user corrects it. */
         function smsReview(items) {
           smsList = items;
           items.forEach(function (r) {
@@ -2181,13 +2381,66 @@
             r.on = !r.dup;
           });
           $('sh').innerHTML =
-            '<div class="grab"></div><h3>' + fr0(items.length) + ' پیامک پیدا شد</h3><div class="list">' +
+            '<div class="grab"></div><h3>' +
+            fr0(items.length) +
+            ' پیامک پیدا شد</h3>' +
+            '<p class="syn">مبلغ و نوع هر مورد را اگر اشتباه تشخیص داده شد اصلاح کن.</p><div class="list">' +
             items
               .map(function (r, i) {
                 return (
-                  '<label class="r" style="cursor:pointer"><input type="checkbox" data-si="' + i + '"' + (r.on ? ' checked' : '') + ' style="width:20px;height:20px;flex:none"><div class="m"><b>' +
-                  esc(r.note || r.cat) + '</b><small>' + esc(r.cat) + ' · ' + sd(r.date) + (r.dup ? ' · احتمالاً تکراری' : '') + '</small></div><div class="v ' + (r.type === 'in' ? 'i' : 'o') + '">' +
-                  (r.type === 'in' ? '+' : '−') + fa(r.amount) + '</div></label>'
+                  '<div class="r"><input type="checkbox" data-si="' +
+                  i +
+                  '" aria-label="انتخاب" ' +
+                  (r.on ? 'checked' : '') +
+                  ' style="width:22px;height:22px;flex:none">' +
+                  '<div class="m"><b>' +
+                  esc(r.note || r.cat || '—') +
+                  '</b><small>' +
+                  esc(r.cat || '') +
+                  ' · ' +
+                  sd(r.date) +
+                  (r.dup ? ' · احتمالاً تکراری' : '') +
+                  '</small>' +
+                  '<div style="display:flex;gap:6px;margin-top:6px"><select data-sty="' +
+                  i +
+                  '" aria-label="نوع تراکنش" style="flex:1;font:inherit;font-size:13px;padding:7px 9px;border-radius:10px;background:var(--fill);color:var(--ink)">' +
+                  '<option value="out"' +
+                  (r.type === 'out' ? ' selected' : '') +
+                  '>هزینه</option><option value="in"' +
+                  (r.type === 'in' ? ' selected' : '') +
+                  '>درآمد</option><option value="tf"' +
+                  (r.type === 'tf' ? ' selected' : '') +
+                  '>انتقال</option></select>' +
+                  '<select data-sto="' +
+                  i +
+                  '" aria-label="حساب مقصد" ' +
+                  (r.type === 'tf' ? '' : 'hidden') +
+                  ' style="flex:1;font:inherit;font-size:13px;padding:7px 9px;border-radius:10px;background:var(--fill);color:var(--ink)">' +
+                  AO(-1)
+                    .map(function (k) {
+                      return (
+                        '<option value="' +
+                        k +
+                        '"' +
+                        (r.to === k ? ' selected' : '') +
+                        '>' +
+                        esc(ACCS[k]) +
+                        '</option>'
+                      );
+                    })
+                    .join('') +
+                  '</select>' +
+                  '<input data-sam="' +
+                  i +
+                  '" inputmode="numeric" aria-label="مبلغ" value="' +
+                  fr0(r.amount) +
+                  '" style="width:104px;text-align:left;font:inherit;font-size:13px;padding:7px 9px;border-radius:10px;background:var(--fill);color:var(--ink)"></div></div>' +
+                  '<div class="v ' +
+                  (r.type === 'in' ? 'i' : 'o') +
+                  '">' +
+                  (r.type === 'in' ? '+' : r.type === 'tf' ? '' : '−') +
+                  fr0(r.amount) +
+                  '</div></div>'
                 );
               })
               .join('') +
@@ -2201,12 +2454,34 @@
           showSheet();
         }
         function smsSave() {
-          var acc = +($('smk') ? $('smk').value : AO(-1)[0]),
+          var def = +($('smk') ? $('smk').value : AO(-1)[0]),
             n = 0,
-            last = null;
-          smsList.forEach(function (r, i) {
+            last = null,
+            bad = 0;
+          /* Validate everything before touching state, so one bad row cannot silently
+             drop the other rows the user selected. */
+          smsList.forEach(function (r) {
+            if (!r.on || r.type !== 'tf') return;
+            var from = r.acc != null ? r.acc : def;
+            if (r.to == null || r.to === from) bad++;
+          });
+          if (bad) {
+            toast('برای ' + fr0(bad) + ' انتقال، حساب مقصد را انتخاب کن');
+            return;
+          }
+          smsList.forEach(function (r) {
             if (!r.on) return;
-            S.tx.push({ id: Date.now() + i, type: r.type, amount: r.amount, cat: r.cat, acc: acc, date: r.date, note: r.note });
+            var isTf = r.type === 'tf';
+            S.tx.push({
+              id: Date.now() + n,
+              type: r.type,
+              amount: r.amount,
+              cat: isTf ? '' : r.cat,
+              acc: isTf ? (r.acc != null ? r.acc : def) : def,
+              to: isTf ? r.to : undefined,
+              date: r.date,
+              note: r.note,
+            });
             n++;
             last = r.date;
           });
@@ -2224,7 +2499,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-ar],[data-pdel],[data-sr],[data-sx],[data-asset],[data-debt],[data-dd],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
+            '[data-tab],[data-m],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-ar],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -2294,11 +2569,16 @@
               save();
               render();
             });
-          } else if (d.sr) {
-            snapTo(+d.sr, 'به حالت قبل برگشت');
-          } else if (d.sx) {
-            snapDrop(+d.sx);
-            render();
+          } else if (d.x === 'persists') {
+            var go = navigator.storage && navigator.storage.persist ? navigator.storage.persist() : Promise.resolve(false);
+            go.then(function (ok) {
+              return storageInfo().then(function (r) {
+                stOk = r[0];
+                stEst = r[1];
+                render();
+                toast(ok ? 'حافظه پایدار شد' : 'مرورگر نپذیرفت؛ برنامه را به صفحه اصلی اضافه کن');
+              });
+            });
           } else if (d.asset) openAsset(+d.asset);
           else if (d.debt) openPerson(d.debt);
           else if (d.dd) {
@@ -2415,13 +2695,14 @@
           } else if (d.x === 'asopen') openAsset();
           else if (/^as(save|del)$/.test(d.x)) assetAct(d.x);
           else if (d.x === 'dnew') openDebt('', 'g');
+          else if (d.de) openDebtEntry(+d.de);
           else if (d.x === 'dgive') openDebt(dP, 'g');
           else if (d.x === 'dget') openDebt(dP, 'r');
-          else if (d.x === 'dsave' || d.x === 'dsettle') debtAct(d.x);
+          else if (d.x === 'dsave' || d.x === 'dsettle' || d.x === 'desave' || d.x === 'dedel') debtAct(d.x);
           else if (d.x === 'csvm') exportCsv(false);
           else if (d.x === 'csva') exportCsv(true);
           else if (d.x === 'lopen') openLoan();
-          else if (/^l(new|pay|del)$/.test(d.x)) loanAct(d.x);
+          else if (/^l(new|save|pay|del)$/.test(d.x)) loanAct(d.x);
           else if (d.x === 'addcat') {
             var nm = $('cn')
               .value.replace(/[<>&"]/g, '')
@@ -2451,7 +2732,7 @@
             closeSheet();
             render();
           } else if (d.x === 'gopen') openGoal();
-          else if (/^g(new|add|sub|del)$/.test(d.x)) goalAct(d.x);
+          else if (/^g(new|save|add|sub|del)$/.test(d.x)) goalAct(d.x);
           else if (d.x === 'dup') {
             var t0 = S.tx.filter(function (x) {
               return x.id === editId;
@@ -2534,9 +2815,15 @@
         });
         document.addEventListener('input', function (e) {
           var t = e.target;
-          if (t.id === 'fa' || t.id === 'ga' || t.id === 'la' || t.id === 'ao' || t.id === 'ap' || t.id === 'ac' || t.id === 'da') {
+          if (t.id === 'fa' || t.id === 'ga' || t.id === 'gt' || t.id === 'la' || t.id === 'lc' || t.id === 'lp' || t.id === 'ao' || t.id === 'ap' || t.id === 'ac' || t.id === 'da') {
             var v = digits(t.value);
             t.value = v ? fr0(v) : '';
+          } else if (t.dataset.sam !== undefined) {
+            var am = parseInt(digits(t.value), 10) || 0,
+              sr = smsList[+t.dataset.sam];
+            sr.amount = am;
+            var vs = t.closest('.r').querySelector('.v');
+            if (vs) vs.textContent = (sr.type === 'in' ? '+' : sr.type === 'tf' ? '' : '−') + fr0(am);
           } else if (t.id === 'q') {
             q = t.value;
             /* Re-rendering mid-composition would destroy the Persian IME session. */
@@ -2557,6 +2844,12 @@
         document.addEventListener('change', function (e) {
           var t = e.target;
           if (t.dataset.si !== undefined) smsList[+t.dataset.si].on = t.checked;
+          else if (t.dataset.sty !== undefined) {
+            var si = +t.dataset.sty;
+            smsList[si].type = t.value;
+            var to = document.querySelector('[data-sto="' + si + '"]');
+            if (to) to.hidden = t.value !== 'tf';
+          } else if (t.dataset.sto !== undefined) smsList[+t.dataset.sto].to = +t.value;
           else if (t.dataset.b) render();
           else if (t.dataset.pn !== undefined) {
             var pi = +t.dataset.pn,
@@ -3057,8 +3350,17 @@
         }
         load();
         runPending();
-        snapDaily();
         render();
+        /* Chain: the mirror must not be rewritten before the rescue has had its say,
+           or a fresh empty state would overwrite the only surviving copy. */
+        mirrorRescue().then(function () {
+          mirror();
+        });
+        storageInfo().then(function (r) {
+          stOk = r[0];
+          stEst = r[1];
+          if (tab === 'set') render();
+        });
         aniApp();
         syBoot();
         if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
@@ -3066,5 +3368,31 @@
 
     if ('serviceWorker' in navigator)
       window.addEventListener('load', function () {
-        navigator.serviceWorker.register('sw.js').catch(function () {});
+        var reloading = false;
+        /* A waiting worker means a new build is on disk. The old page is still running the
+           old code, so ask instead of silently swapping underneath the user. */
+        function offer(reg) {
+          var w = reg && reg.waiting;
+          if (!w || !navigator.serviceWorker.controller) return;
+          toast('نسخه‌ی جدید برنامه آماده است', function () {
+            reloading = true;
+            w.postMessage({ type: 'SKIP_WAITING' });
+          }, 'به‌روزرسانی کن');
+        }
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (reloading) location.reload();
+        });
+        navigator.serviceWorker.register('sw.js').then(function (reg) {
+          offer(reg);
+          reg.addEventListener('updatefound', function () {
+            var w = reg.installing;
+            if (!w) return;
+            w.addEventListener('statechange', function () {
+              if (w.state === 'installed') offer(reg);
+            });
+          });
+          setInterval(function () {
+            reg.update().catch(function () {});
+          }, 30 * 60 * 1000);
+        }).catch(function () {});
       });

@@ -1,6 +1,6 @@
 /* Precache service worker so the app really works offline.
    Bump CACHE whenever you ship a new build — a cached shell only refreshes when its cache name changes. */
-var CACHE = 'hesab-v4';
+var CACHE = 'hesab-v6';
 var ASSETS = [
   './',
   './index.html',
@@ -24,11 +24,14 @@ self.addEventListener('install', function (e) {
             return new Request(u, { cache: 'reload' });
           }),
         );
-      })
-      .then(function () {
-        return self.skipWaiting();
       }),
   );
+});
+
+/* Do not skipWaiting on install: the new worker waits so the page can ask the user first.
+   With skipWaiting in install, the running page keeps executing the old bundle forever. */
+self.addEventListener('message', function (e) {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', function (e) {
