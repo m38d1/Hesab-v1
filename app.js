@@ -975,6 +975,10 @@
           norm();
           var h = { home: home, tx: txs, bud: bud, set: set }[tab]();
           $('app').innerHTML = h;
+          /* کیف پول تازه ساخته شده و حالا در صفحه است. setTimeout آن را از
+             همین رندر جدا می‌کند تا بعد از پایان رندر اجرا شود، و دو فریم
+             صبر می‌کند تا عرض کارت‌ها معلوم شود. */
+          if (tab === 'home') walletArm();
           $('bar').innerHTML = TABS.map(function (t) {
             return (
               '<button role="tab" data-tab="' +
@@ -2387,6 +2391,174 @@
           closeSheet();
           render();
         }
+        /* ---------- کیف پول ----------
+           کارت‌ها به‌جای اسکرول، با translate جابه‌جا می‌شوند. دلیلش این است
+           که هر overflow روی نوار یک clipping context می‌سازد و هر transform
+           روی خودِ نوار فضای بچینش را خراب می‌کند. یک لایهٔ بیرونی
+           (.wrail) فقط ترجمه می‌کند و هیچ فرزندِ چیدمان‌داری ندارد.
+
+           حلقه بی‌پایان با کپی کردن دو کارت از هر سر ساخته می‌شود. هر بار که
+           کاربر از آخرین کارت رد شد، بی‌صدا به اول برمی‌گردد و برعکس. */
+        var LOOP_N = 2,
+          wIdx = 0,
+          wDrag = null;
+        /* فاصلهٔ دو کارت = عرضشان + فاصله. از مختصات دو کارتِ مجاور
+           نمی‌شود خواند چون کپی‌ها روی هم می‌افتند و اختلاف صفر می‌شود. */
+        function walletStep(w) {
+          var _cards = Array.prototype.filter.call(w.children, function (x) {
+            return x.classList && x.classList.contains('wc');
+          });
+          var c = _cards[0];
+          if (!c) return 0;
+          var gap = parseFloat(getComputedStyle(w).gap) || 0;
+          return c.getBoundingClientRect().width + gap;
+        }
+        /* یک پوشش که بعد از دو فریم واقعاً کار می‌کند، برای وقتی که
+           walletLoop خیلی زود — قبل از اینکه نوار در صفحه بنشیند — صدا
+           زده شود. */
+        var loopArmed = 0;
+        function walletArm() {
+          var n = ++loopArmed;
+          setTimeout(function () {
+            setTimeout(function () {
+              if (n === loopArmed) {
+                try {
+                  walletLoop();
+                } catch (e) {
+                  if (window.console) console.error('walletLoop:', e);
+                }
+              }
+            });
+          });
+        }
+                function walletLoop() {
+          var w = document.querySelector('.wallet');
+          if (!w) {
+            walletArm();
+            return;
+          }
+          if (!w.querySelector('.wc')) {
+            walletArm();
+            return;
+          }
+          if (w.dataset.looped) return;
+          w.dataset.looped = 'building';
+          /* پاکسازی clonesِ پیشین (اگر اجرای قبلی نیمه جا مانده بود). آن‌ها
+             الگوریتم step/k را گیج می‌کنند و تا وقتی نباشند، کارتٔ واقعی
+             نفرِ اول وسط نمی‌نشیند. */
+          Array.prototype.slice.call(w.children).forEach(function (c) {
+            if (c.dataset && c.dataset.clone === '1') c.remove();
+          });
+
+          var cards = function (cloned) {
+            return Array.prototype.filter.call(w.children, function (c) {
+              return !!(c.classList && c.classList.contains('wc')) && (cloned ? (c.dataset && c.dataset.clone === '1') : true);
+            });
+          };
+          var real = cards();
+          if (real.length < 3) return;
+          /* بدون cloneها، real همان چهار کارت است — k از real.length
+             کجصل می‌شود. */
+          real = real.filter(function (c) {
+            return c.dataset.clone !== '1';
+          });
+          /* اگر قبلاً کپی شده، فقط دوباره جای‌نشینی کن */
+          if (!Array.prototype.some.call(w.children, function (c){ return c.dataset && c.dataset.clone === '1'; })) {
+            var k = Math.min(LOOP_N, real.length - 1),
+              i;
+            /* کپی‌های اول، به ترتیب، قبل از همه: در چیدمان راست‌به‌چپ،
+               «اول» یعنی انتهای چپ نوار. با fragment و insertBefore یک‌جا
+               درج می‌کنیم تا هر کدام سرِ جای خودشان بنشینند. */
+            var head = document.createDocumentFragment();
+              for (i = real.length - k; i < real.length; i++) {
+              var cl = real[i].cloneNode(true);
+              head.appendChild(cl);
+            }
+            w.insertBefore(head, w.firstChild);
+            /* کپی‌های آخر، بعد از همه */
+            var tail = document.createDocumentFragment();
+            for (i = 0; i < k; i++) {
+              var cl2 = real[i].cloneNode(true);
+              tail.appendChild(cl2);
+            }
+            w.appendChild(tail);
+            var marked = 0;
+            cards().forEach(function (c) {
+              if (real.indexOf(c) < 0) {
+                c.dataset.clone = '1';
+                marked++;
+              }
+            });
+            w.dataset.looped = '1';
+          }
+          var step = walletStep(w);
+          if (!step) return;
+          /* مرکزسازی قابل اعتماد: padding را خودمان حساب می کنیم تا
+             min(...) در calc CSS کل的를 خراب نکند. */
+          /* تعداد کپی هر سر از شمارش خودِ کپی‌ها، نه از تقسیم بر دو که
+             وقتی روی هم می‌افتند قابل‌اعتماد نیست. */
+          var k = Array.prototype.filter.call(real, function(){return false;}).length || (+w.dataset.k) ;
+          /* کپی های دوشنبه دوشان 4 تا بودند: clones خودِ run جدید */
+          var _clonesNow = Array.prototype.filter.call(w.children, function(c){ return c.dataset && c.dataset.clone === '1';}).length;
+          if (_clonesNow > 0) k = _clonesNow / 2;
+          else if (isNaN(k) || k <= 0) k = 2;
+          w.dataset.k = String(k);
+          w.dataset.n = String(real.length);
+          w.dataset.step = String(step);
+          /* إندازهٔ واقعی مسافت بینهای ستون کارت صفرم را روی صفحه
+             میخوانیم و ظرف را دقیقا آنجایی که باید ببریم. */
+          var rail0 = w.parentNode;
+          var firstReal0 = real[k] || real[0];
+          var cardRect0 = firstReal0.getBoundingClientRect();
+          var railRect0 = rail0.getBoundingClientRect();
+          var desired = railRect0.left + ((rail0.clientWidth || w.clientWidth) / 2);
+          var t0 = Math.round(desired - (cardRect0.left + cardRect0.width / 2));
+          w.dataset.t0 = String(t0);
+          /* چون render هر بار نوار را تازه می‌سازد، همیشه از صفر شروع می‌کنیم */
+          wIdx = 0;
+          walletPlace(w, 0);
+        }
+        /* walletPlace کارت واقعیِ شمارهٔ idx را وسط می‌آورد. کارت‌های کپی
+           k تا قبل و بعد از آن می‌نشینند، ولی ما فقط کارت واقعی را حساب
+           می‌کنیم چون پدینگ نوار جای کپی‌ها را از قبل باز کرده. */
+        /* walletPlace کارتِ idx را وسط می آورد. بر پایة t0 محاسبه شده
+           مبتنی بر اندازه های واقعی، بر خلاف فرمول ثابت قبلی که سرِ
+           پدینگ خراب با min() بود. */
+        function walletPlace(w, idx) {
+          var step = parseFloat(w.dataset.step) || 0;
+          if (!step) return;
+          var t0 = +(w.dataset.t0 || 0);
+          if (!t0) t0 = +(w.dataset.lead || 0);
+          wIdx = idx;
+          w.dataset.idx = String(idx);
+          var rail = w.parentNode;
+          if (rail && rail.classList.contains('wrail'))
+            rail.style.transform = 'translateX(' + Math.round(t0 - idx * step) + 'px)';
+        }
+        function walletStep1(w, dir) {
+          if (!w.dataset.step) return;
+          var n = +w.dataset.n,
+            i = wIdx + dir;
+          if (i >= n) i -= n;
+          if (i < 0) i += n;
+          walletPlace(w, i);
+        }
+        function walletDown(e) {
+          var w = e.target && e.target.closest ? e.target.closest('.wallet') : null;
+          if (!w || !w.dataset.step) return;
+          var p = e.touches ? e.touches[0] : e;
+          wDrag = { x: p.clientX, y: p.clientY, w: w };
+        }
+        function walletUp(e) {
+          if (!wDrag) return;
+          var p = e.changedTouches ? e.changedTouches[0] : e;
+          var dx = p.clientX - wDrag.x,
+            dy = p.clientY - wDrag.y;
+          var w = wDrag.w;
+          wDrag = null;
+          if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+          walletStep1(w, dx < 0 ? 1 : -1);
+        }
         function walletHtml(total, inc, exp) {
           var G = [
               (ACC[S.accent] || ACC.blue).g,
@@ -2399,7 +2571,7 @@
             u = S.unit === 'R' ? 'ریال' : 'تومان',
             ct = '<svg viewBox="0 0 24 24"><path d="M8.5 8.5a5 5 0 0 1 0 7M12 6a8.5 8.5 0 0 1 0 12M15.5 3.5a12 12 0 0 1 0 17"/></svg>';
           function cd(g, t, v, l, r, b) {
-            /* b = پشت کارت. کارتی که پشت ندارد یک‌رویه است و برنمی‌گردد. */
+            /* b = شمارهٔ کارت، که پایین همان کارت می‌نشیند. */
             var f =
               '<div class="wff"><div class="wt"><span>' +
               t +
@@ -2410,21 +2582,20 @@
               fa(Math.abs(v)) +
               '<i>' +
               u +
-              '</i></div><div class="wb"><span>' +
+              '</i></div>' +
+              (b ? '<div class="wcno">' + b + '</div>' : '') +
+              '<div class="wb"><span>' +
               l +
               '</span>' +
               ct +
               '</div></div>';
             return (
               '<div class="wc' +
-              (b ? ' fl' : '') +
-              '"' +
-              (b ? ' data-wc="' + b.i + '"' : '') +
-              ' style="background:' +
+              (b ? ' acct' : '') +
+              '" style="background:' +
               g +
               '"><div class="wi">' +
               f +
-              (b ? '<div class="wfb">' + b.h + '</div>' : '') +
               '</div></div>'
             );
           }
@@ -2441,24 +2612,19 @@
               .replace(/(.{4})/g, '$1 ')
               .trim();
           }
-          function cardBack(i, bal) {
-            var no = cnoFmt(S.acno[i]);
-            return {
-              i: i,
-              h:
-                '<div class="wbi"><span class="bt">' +
-                (no ? 'شمارهٔ کارت' : 'شمارهٔ کارت ثبت نشده') +
-                '</span><b class="bnr' +
-                (no ? '' : ' dim') +
-                '">' +
-                esc(no || 'از تنظیمات بساز') +
-                '</b></div>' +
-                '<div class="wbi g"><span class="bt">مبلغ به حروف</span><b class="bnr sm">' +
-                esc(words(S.unit === 'R' ? Math.round(bal * 10) : Math.round(bal))) +
-                '</b></div>',
-            };
-          }
-          var h = cd(
+          /* پایین کارت: شمارهٔ کارت با رقم فارسی و گروه چهارتایی، و مبلغ
+           به حروف. اگر شماره‌ای ثبت نشده، جای خالی می‌ماند. */
+        function cardBack(i, bal) {
+          var no = cnoFmt(S.acno[i]);
+          return (
+            '<div class="wcn">' +
+            esc(no) +
+            '</div><div class="wcw">' +
+            esc(words(S.unit === 'R' ? Math.round(bal * 10) : Math.round(bal))) +
+            '</div>'
+          );
+        }
+        var h = cd(
             G[0],
             'دارایی کل',
             total,
@@ -2486,9 +2652,9 @@
           });
           if (S.assets.length) h += cd(G[4], 'دارایی غیرنقدی', assetsTotal(), 'قیمت دستی', '<span style="font-size:20px">💎</span>');
           return (
-            '<div class="wallet">' +
+            '<div class="wrail"><div class="wallet">' +
             h +
-            '</div><div class="mini"><div><small>درآمد ماه</small><b style="color:var(--grn)">' +
+            '</div></div><div class="mini"><div><small>درآمد ماه</small><b style="color:var(--grn)">' +
             fa(inc) +
             '</b></div><div><small>هزینه ماه</small><b style="color:var(--red)">' +
             fa(exp) +
@@ -2500,7 +2666,6 @@
           tmr = null,
           /* کدام کارتِ حساب چرخیده است. باید بیرون از walletHtml بماند،
              وگرنه هر render وضعیت را پاک می‌کرد. */
-          flipped = {},
           /* حسابی که مودال ویرایشش باز است */
           accEd = null;
         function buzz() {
@@ -3475,19 +3640,26 @@
         $('plus').onclick = function () {
           openSheet();
         };
-        /* چرخش کارت: کلیک روی کارتِ حساب، رو و پشتش را عوض می‌کند. حالت
-           چرخیده در متغیر می‌ماند تا با هر render دوباره بسته نشود. */
-        document.addEventListener('click', function (e) {
-          var w = e.target.closest && e.target.closest('.wc.fl');
-          if (!w) return;
-          var i = +w.dataset.wc;
-          if (!(i >= 0)) return;
-          /* دکمه‌های روی کارت (تومان ⇄ و پنهان‌سازی) نباید کارت را برگردانند */
-          if (e.target.closest('button')) return;
-          if (flipped[i]) flipped[i] = 0;
-          else flipped[i] = 1;
-          w.classList.toggle('on', !!flipped[i]);
-        });
+        /* جابه‌جایی کارت‌ها با انگشت یا چرخ ماوس. روی سند گوش می‌دهد چون
+           نوار کیف پول با هر render از نو ساخته می‌شود. */
+        document.addEventListener('touchstart', walletDown, { passive: true });
+        document.addEventListener('touchend', walletUp, { passive: true });
+        document.addEventListener('pointerdown', walletDown, { passive: true });
+        document.addEventListener('pointerup', walletUp, { passive: true });
+        document.addEventListener(
+          'wheel',
+          function (e) {
+            var t = e.target && e.target.closest ? e.target.closest('.wallet, .wrail') : null;
+            if (t && t.classList.contains('wrail')) t = t.querySelector('.wallet');
+            var w = t;
+            if (!w || !w.dataset.step) return;
+            var d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+            if (Math.abs(d) < 20) return;
+            e.preventDefault();
+            walletStep1(w, d > 0 ? 1 : -1);
+          },
+          { passive: false },
+        );
         document.addEventListener('keydown', function (e) {
           /* کلیدهای فهرست پیشنهاد، فقط وقتی باز است و ورودی شخص فعال است. */
           if (pplHits.length && $('fp') && document.activeElement === $('fp')) {

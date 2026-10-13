@@ -767,9 +767,6 @@
           padding: 14px 16px;
         }
         .wff,
-        .wfb {
-          padding: 14px 16px;
-        }
         .wv {
           font-size: 20px;
         }
@@ -1154,6 +1151,11 @@
       .wallet {
         /* عرض کارت. فاصلهٔ دو طرف را scroll-padding و padding-inline می‌دهند. */
         --cw: min(72vw, 300px);
+        /* جای دو کارت کپی در هر سر نوار، تا کارت واقعی با فاصلهٔ مساوی از دو
+           طرف وسط بنشیند: نصف فضای خالی + عرض کپی‌ها. اگر این را ندهیم،
+           کارتِ اول به لبه می‌چسبد و کپی‌ها رویش می‌افتند. */
+        /* ثابت روی ۳۰۰ تا calc آن را از --cw:min(...) دریافت کند که عمل نمی‌کرد */
+        --lead: calc((100vw - 300px) / 2);
         display: flex;
         gap: 12px;
         width: 100vw;
@@ -1163,21 +1165,29 @@
            اسنپ و اسکرول لمسی درست رفتار نمی‌کنند. متن داخل کارت‌ها خودش
            راست‌به‌چپ می‌ماند چون dir روی همان کارت‌هاست. */
         direction: ltr;
-        overflow-x: auto;
-        overflow-y: hidden;
-        -webkit-overflow-scrolling: touch;
+        /* اسکرول عمداً CSS نیست. هر overflow روی نوار یعنی clipping context
+           و آن فضای سه‌بعدیِ کارت‌ها را می‌بندد — چرخش کارت بی‌صدا از کار
+           می‌افتد در حالی که کلاس on روی عنصر هست. پس نوار اسکرول‌پذیر
+           نیست؛ جا به‌جایی با جابه‌جایی خودِ کارت‌ها انجام می‌شود
+           (walletScroll). */
+        overflow: visible;
         /* پدینگ دو طرف برابر با نصف فضای خالی: کارت اول وسط می‌افتد و
-           کارت آخر هم با همان فاصله تمام می‌شود. calc با 100vw درست است
-           چون خودِ نوار 100vw است. */
-        padding: 2px calc((100vw - var(--cw)) / 2) 10px;
-        scrollbar-width: none;
-        scroll-behavior: smooth;
-        /* بدون این، کارت بعدی وسط صفحه نمی‌ایستد و کاربر باید دستی دقیق
-           تنظیم کند. اسنپ، چرخش سه‌بعدی را نمی‌شکند — آن را انیمیشن ورود
-           می‌شکست که از .wallet بیرون آمده. */
-        scroll-snap-type: x mandatory;
-        /* scroll-padding تا اسنپ کارت را با همان فاصلهٔ دو طرف وسط بگذارد */
-        scroll-padding-inline: calc((100vw - var(--cw)) / 2);
+           کارت آخر هم با همان فاصله تمام می‌شود. کپی‌های حلقه بیرون از این
+           پدینگ می‌نشینند و در همان دو سر نوار جمع می‌شوند. */
+        padding: 2px var(--lead) 10px;
+      }
+      /* کپی‌ها عرض خودشان را نگه می‌دارند و در جای خودشان می‌نشینند. */
+      .wc[data-clone] {
+        flex: none;
+      }
+      /* جابه‌جایی روی خودِ نوار نه: transform در هر عنصری که چرخش سه‌بعدی
+         دارد، فضا را flatten می‌کند. یک لایهٔ بیرونی اضافه می‌کنیم که
+         فقط ترجمه می‌کند و هیچ فرزند سه‌بعدی ندارد. */
+      .wrail {
+        overflow: hidden;
+      }
+      .wrail > .wallet {
+        transition: transform 0.35s cubic-bezier(0.25, 0.1, 0.2, 1);
       }
       .wallet::-webkit-scrollbar {
         display: none;
@@ -1194,101 +1204,60 @@
       .wc {
         flex: none;
         width: var(--cw);
-        /* نوار چپ‌به‌راست شد تا اسکرول کار کند؛ محتوای کارت باید
+        /* نوار چپ‌به‌راست شد تا جابه‌جایی کار کند؛ محتوای کارت باید
            دوباره راست‌به‌چپ شود وگرنه همه‌چیز چپ‌چین می‌افتد. */
         direction: rtl;
-        aspect-ratio: 1.586;
+        /* ارتفاع از عرض می‌آید. aspect-ratio وقتی فرزندِ مطلق داشته باشیم
+           از محتوا ارتفاع می‌گیرد و کارت ۶۷۳ پیکسل بلند می‌شود — برای همین
+           فرزندها position:relative هستند و ارتفاع را خودِ نسبت می‌دهد. */
+        height: calc(var(--cw) / 1.586);
         border-radius: 24px;
         color: #fff;
         position: relative;
         scroll-snap-align: center;
         display: block;
         box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
-        /* چشم روی خودِ کارت: کارت هرکدام فضای سه‌بعدیِ مستقل خودش را
-           دارد و اسکرولِ نوار دیگر چیزی را خراب نمی‌کند. */
-        perspective: 1200px;
-        /* overflow اینجا عمداً نیست. overflow:hidden فضای سه‌بعدی را
-           می‌بندد و rotateY را بی‌اثر می‌کند؛ گِردی گوشه‌ها را روی
-           خودِ رو و پشت کارت نگه می‌داریم. */
       }
-      /* لایهٔ میانی که می‌چرخد. perspective را روی خودِ همین عنصر
-         می‌گذاریم نه روی والد: والد overflow:hidden دارد و در بعضی
-         موتورها آن ترکیب فضای سه‌بعدی را می‌بندد و چرخش را بی‌اثر
-         می‌کند. */
-      .wi {
+      /* روی کارت: شمارهٔ کارت و مبلغ به حروف */
+      .wcno {
+        margin-top: 6px;
+        font-size: 11.5px;
+        letter-spacing: 0.5px;
+        opacity: 0.92;
+        font-variant-numeric: tabular-nums;
+      }
+      .wcn {
+        font-size: 12.5px;
+        font-weight: 600;
+        letter-spacing: 0.6px;
+        opacity: 0.95;
+        font-variant-numeric: tabular-nums;
+        margin-top: 5px;
+      }
+      .wcw {
+        font-size: 10.5px;
+        opacity: 0.72;
+        line-height: 1.5;
+        margin-top: 1px;
+        /* متن بلند نباید از کارت بیرون بزند */
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      /* روی کارت. overflow اینجا امن است چون دیگر چرخش سه‌بعدی نداریم و
+         گِردی گوشه‌ها را همین‌جا نگه می‌داریم. */
+      .wff {
         position: absolute;
         inset: 0;
-        display: flex;
-        flex-direction: column;
-        transform-style: preserve-3d;
-        transition: transform 0.55s cubic-bezier(0.4, 0.1, 0.2, 1);
-      }
-      .wc.on .wi {
-        transform: rotateY(180deg);
-      }
-      /* رو و پشت کارت */
-      .wff,
-      .wfb {
-        position: absolute;
-        inset: 0;
+        height: 100%;
+        /* ارتفاع والد را از نسبت گرفته‌ایم، پس اینجا flex ستون می‌ماند */
         padding: 18px 20px;
         display: flex;
         flex-direction: column;
         border-radius: 24px;
         overflow: hidden;
-        backface-visibility: hidden;
-        -webkit-backface-visibility: hidden;
       }
-      .wfb {
-        transform: rotateY(180deg);
-        justify-content: center;
-        gap: 14px;
-      }
-      /* محتوای پشت کارت: شمارهٔ کارت و مبلغ به حروف */
-      .wbi {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-      }
-      .wbi.g {
-        margin-top: 18px;
-      }
-      .bt {
-        font-size: 11px;
-        opacity: 0.75;
-        letter-spacing: 0.2px;
-      }
-      .bnr {
-        font-size: 16px;
-        font-weight: 700;
-        letter-spacing: 0.4px;
-        /* رقم‌های فارسی نباید حاشیهٔ کلمه داشته باشند */
-        word-spacing: 0;
-        font-feature-settings: 'ss01';
-      }
-      .bnr.sm {
-        font-size: 12.5px;
-        font-weight: 600;
-        line-height: 1.65;
-        /* متن بلند نباید از کارت بیرون بزند */
-        display: -webkit-box;
-        -webkit-line-clamp: 4;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-      .bnr.dim {
-        opacity: 0.55;
-        font-weight: 500;
-      }
-      /* پرسش: کارت در حالت چرخیده هم واکنش به فشردن بدهد */
-      .wc:active .wi {
-        transform: rotateY(0deg) scale(0.97);
-      }
-      .wc.on:active .wi {
-        transform: rotateY(180deg) scale(0.97);
-      }
-      /* دایره‌های تزیینی. چون .wc دیگر overflow ندارد (برای چرخش)، اینها
-         باید روی خودِ روِ کارت باشند تا از گِردی گوشه بیرون نزنند. */
       .wff::before {
         content: '';
         position: absolute;
@@ -1314,10 +1283,6 @@
          بی‌اثر می‌ماند و لایه ارتفاع صفر می‌گیرد. */
       .wc > *:not(.wi),
       .wff > *,
-      .wfb > * {
-        position: relative;
-        z-index: 1;
-      }
       .wt {
         display: flex;
         justify-content: space-between;
