@@ -752,6 +752,80 @@
       .fld.tx .dt button {
         font-size: 15px;
       }
+      /* ---------- افقی روی گوشی ----------
+         ارتفاع کم است (حدود ۳۹۰ پیکسل) و عرض زیاد. فرم عمودی در این حالت
+         دکمهٔ ذخیره را زیر لبهٔ صفحه می‌برد، یعنی کاربر ذخیره نمی‌کند و
+         تراکنشش گم می‌شود. پس در افقی: چهار ستون، ارتفاع کمتر، و دکمه‌ها
+         کنار هم. */
+      @media (orientation: landscape) and (max-height: 560px) {
+        .wrap {
+          padding-top: 8px;
+        }
+        /* کارت‌های کیف پول در افقی جای زیادی می‌گیرند؛ کوچکترشان می‌کنیم. */
+        .wc {
+          width: min(46%, 260px);
+          padding: 14px 16px;
+        }
+        .wff,
+        .wfb {
+          padding: 14px 16px;
+        }
+        .wv {
+          font-size: 20px;
+        }
+        .fld .amt {
+          font-size: 19px;
+        }
+        .wallet {
+          margin-bottom: 8px;
+          padding-bottom: 6px;
+        }
+        .mini {
+          margin-bottom: 8px;
+        }
+        /* چهار ستون: در عرض ۸۰۰ هر ستون حدود ۱۹۰ پیکسل، برای ورودی کافی است */
+        .fld.tx {
+          grid-template-columns: repeat(4, 1fr);
+        }
+        /* نام و شخص و تاریخ در عرض هستند و جا دارند؛ توضیح هم */
+        .fld.tx label.full {
+          grid-column: span 2;
+        }
+        /* شیت در افقی تا نزدیکی بالا بالا می‌آید */
+        #sh {
+          padding-top: 6px;
+          padding-bottom: 10px;
+        }
+        #sh h3 {
+          margin-bottom: 6px;
+          font-size: 17px;
+        }
+        #sh .grab {
+          display: none;
+        }
+        /* دکمه‌ها کنار هم تا ذخیره همیشه در دسترس باشد */
+        #sh > .btn {
+          flex: 1;
+          margin-bottom: 0;
+        }
+        #sh > .btn + .btn {
+          margin-inline-start: 6px;
+        }
+        .fld.tx ~ .btn.g {
+          margin-bottom: 6px;
+        }
+        details.more > summary {
+          min-height: 34px;
+          padding: 4px 14px;
+        }
+        /* نوار پایین در افقی جای کمی دارد، پس کوچک‌تر */
+        .tabs {
+          bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+        }
+        .wrap {
+          padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+        }
+      }
       /* در یک صفحهٔ باریک، یک ستون امن‌تر است: ورودی‌ها له می‌شوند. */
       @media (max-width: 360px) {
         .fld.tx {
@@ -1071,31 +1145,58 @@
         height: 100%;
         border-radius: 9px;
       }
-      /* کیف پول. scroll-snap-type اینجا عمداً نیست: snap یک containing
-         block می‌سازد و فضای سه‌بعدیِ کارت‌ها را می‌بندد، حتی وقتی
-         overflow را visible می‌گذاریم — کارت دیگر نمی‌چرخد. بنابراین
-         اسکرول افقی هست ولی snap نه؛ کشیدن با انگشت کار می‌کند و
-         جای‌نشینیِ نرم را wSnap در جاوااسکریپت انجام می‌دهد. */
+      /* کیف پول. اسنپ لازم است وگرنه کاربر بعد از کشیدن هرجا می‌ماند و
+         کارت‌ها وسط‌چین نمی‌شوند. آنچه چرخش سه‌بعدی را می‌شکند اسنپ نبود،
+         انیمیشن ورود بود که fill-mode:both داشت و از این فهرست بیرون آمد. */
+      /* کیف پول تمام‌عرض. از ستون ۶۰۰ پیکسلی بیرون می‌زند تا از لبهٔ لبهٔ
+         صفحه رد شود، و کنارش همان‌قدر فاصله می‌ماند تا هر کارت با فاصلهٔ
+         برابر از دو طرف دیده شود — یعنی «نگاه‌کردن» به کارت بعدی. */
       .wallet {
+        /* عرض کارت. فاصلهٔ دو طرف را scroll-padding و padding-inline می‌دهند. */
+        --cw: min(72vw, 300px);
         display: flex;
         gap: 12px;
+        width: 100vw;
+        margin-inline: calc(50% - 50vw);
+        /* نوار را چپ‌به‌راست می‌کنیم. در حالت راست‌به‌چپ، scrollLeft
+           همیشه صفر می‌ماند (مقدار منفی می‌گیرد که اینجا کار نمی‌کند) و
+           اسنپ و اسکرول لمسی درست رفتار نمی‌کنند. متن داخل کارت‌ها خودش
+           راست‌به‌چپ می‌ماند چون dir روی همان کارت‌هاست. */
+        direction: ltr;
         overflow-x: auto;
         overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
-        margin: 0 -16px 12px;
-        padding: 2px 16px 10px;
+        /* پدینگ دو طرف برابر با نصف فضای خالی: کارت اول وسط می‌افتد و
+           کارت آخر هم با همان فاصله تمام می‌شود. calc با 100vw درست است
+           چون خودِ نوار 100vw است. */
+        padding: 2px calc((100vw - var(--cw)) / 2) 10px;
         scrollbar-width: none;
         scroll-behavior: smooth;
+        /* بدون این، کارت بعدی وسط صفحه نمی‌ایستد و کاربر باید دستی دقیق
+           تنظیم کند. اسنپ، چرخش سه‌بعدی را نمی‌شکند — آن را انیمیشن ورود
+           می‌شکست که از .wallet بیرون آمده. */
+        scroll-snap-type: x mandatory;
+        /* scroll-padding تا اسنپ کارت را با همان فاصلهٔ دو طرف وسط بگذارد */
+        scroll-padding-inline: calc((100vw - var(--cw)) / 2);
       }
       .wallet::-webkit-scrollbar {
         display: none;
+      }
+      /* 100vw در دسکتاپ عرض نوار پیمایش را هم حساب می‌کند و یک نوار
+         افقی می‌سازد. روی body نه روی html — overflow-x روی html
+         اسنپ را باطل می‌کند چون viewport اسکرول‌پذیر می‌شود. */
+      body {
+        overflow-x: clip;
       }
       /* توجه: هیچ transformی روی .wc نگذار. حتی translateZ(0) یک stacking
          context می‌سازد و فرزندان را flatten می‌کند، یعنی چرخش کارت
          از کار می‌افتد در حالی که کلاس on روی عنصر هست. */
       .wc {
         flex: none;
-        width: min(84%, 330px);
+        width: var(--cw);
+        /* نوار چپ‌به‌راست شد تا اسکرول کار کند؛ محتوای کارت باید
+           دوباره راست‌به‌چپ شود وگرنه همه‌چیز چپ‌چین می‌افتد. */
+        direction: rtl;
         aspect-ratio: 1.586;
         border-radius: 24px;
         color: #fff;
