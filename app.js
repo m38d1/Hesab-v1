@@ -2507,12 +2507,10 @@
           w.dataset.step = String(step);
           /* إندازهٔ واقعی مسافت بینهای ستون کارت صفرم را روی صفحه
              میخوانیم و ظرف را دقیقا آنجایی که باید ببریم. */
-          var rail0 = w.parentNode;
-          var firstReal0 = real[k] || real[0];
-          var cardRect0 = firstReal0.getBoundingClientRect();
-          var railRect0 = rail0.getBoundingClientRect();
-          var desired = railRect0.left + ((rail0.clientWidth || w.clientWidth) / 2);
-          var t0 = Math.round(desired - (cardRect0.left + cardRect0.width / 2));
+          /* پدینگ CSS نیمهٔ فضای خالی را از قبل داده، پس کافی است کپی‌های
+             ابتدایی را به اندازهٔ k کارت از جلو رد کنیم تا کارت واقعیِ صفرم
+             وسط بنشیند. */
+          var t0 = -k * step;
           w.dataset.t0 = String(t0);
           /* چون render هر بار نوار را تازه می‌سازد، همیشه از صفر شروع می‌کنیم */
           wIdx = 0;
@@ -2532,8 +2530,20 @@
           wIdx = idx;
           w.dataset.idx = String(idx);
           var rail = w.parentNode;
-          if (rail && rail.classList.contains('wrail'))
+          if (rail && rail.classList.contains('wrail')) {
+            /* جای اولیه باید بی‌درنگ بنشیند. اگر ترنزیشن روی همین ترجمه
+               فعال باشد، نوار از وسط صفحه سُر می‌خورد؛ یک فریم ترنزیشن را
+               خاموش می‌کنیم و بعد روشنش می‌گذاریم تا جابه‌جایی‌های بعدی نرم
+               باشند. */
+            if (!w.dataset.placed) {
+              w.dataset.placed = '1';
+              rail.style.transition = 'none';
+              requestAnimationFrame(function () {
+                rail.style.transition = '';
+              });
+            }
             rail.style.transform = 'translateX(' + Math.round(t0 - idx * step) + 'px)';
+          }
         }
         function walletStep1(w, dir) {
           if (!w.dataset.step) return;
@@ -2544,7 +2554,9 @@
           walletPlace(w, i);
         }
         function walletDown(e) {
-          var w = e.target && e.target.closest ? e.target.closest('.wallet') : null;
+          var t = e.target && e.target.closest ? e.target.closest('.wallet, .wrail') : null;
+          if (t && t.classList.contains('wrail')) t = t.querySelector('.wallet');
+          var w = t;
           if (!w || !w.dataset.step) return;
           var p = e.touches ? e.touches[0] : e;
           wDrag = { x: p.clientX, y: p.clientY, w: w };
