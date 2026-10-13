@@ -1159,8 +1159,9 @@
         --lead: calc((100vw - 300px) / 2);
         display: flex;
         gap: 12px;
-        width: 100vw;
-        margin-inline: calc(50% - 50vw);
+        /* ریل خودش تمام‌عرض است، پس نوار دیگر نباید دوباره از ستون بیرون بزند. */
+        width: 100%;
+        margin-inline: 0;
         /* نوار را چپ‌به‌راست می‌کنیم. در حالت راست‌به‌چپ، scrollLeft
            همیشه صفر می‌ماند (مقدار منفی می‌گیرد که اینجا کار نمی‌کند) و
            اسنپ و اسکرول لمسی درست رفتار نمی‌کنند. متن داخل کارت‌ها خودش
@@ -1184,10 +1185,15 @@
       /* جابه‌جایی روی خودِ نوار نه: transform در هر عنصری که چرخش سه‌بعدی
          دارد، فضا را flatten می‌کند. یک لایهٔ بیرونی اضافه می‌کنیم که
          فقط ترجمه می‌کند و هیچ فرزند سه‌بعدی ندارد. */
+      /* ریل قابِ برش است، نه چیزی که جابه‌جا می‌شود. اگر خودِ ریل
+         transform بگیرد، برش همراهش حرکت می‌کند و کارت‌ها از قاب بیرون
+         می‌زنند. پس ریل تمام‌عرض می‌ماند و فقط نوارِ داخلش ترجمه می‌شود. */
       .wrail {
+        width: 100vw;
+        margin-inline: calc(50% - 50vw);
         overflow: hidden;
       }
-      .wrail {
+      .wrail > .wallet {
         transition: transform 0.35s cubic-bezier(0.25, 0.1, 0.2, 1);
         will-change: transform;
       }
@@ -1260,26 +1266,8 @@
         border-radius: 24px;
         overflow: hidden;
       }
-      .wff::before {
-        content: '';
-        position: absolute;
-        width: 220px;
-        height: 220px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.12);
-        left: -70px;
-        top: -90px;
-      }
-      .wff::after {
-        content: '';
-        position: absolute;
-        width: 160px;
-        height: 160px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.09);
-        right: -40px;
-        bottom: -60px;
-      }
+      /* دایره‌های تزیینی پشت کارت حذف شدند: کارت باید یک سطح تمیز باشد
+         و متن شمارهٔ کارت و مبلغ به حروف روی همان خوانده شود. */
       /* z-index لایه‌ها. .wi خودش relative است، پس قاعدهٔ عمومیِ
          «فرزندِ کارت» نباید آن را دوباره position بدهد — وگرنه inset:0
          بی‌اثر می‌ماند و لایه ارتفاع صفر می‌گیرد. */

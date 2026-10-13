@@ -2529,21 +2529,17 @@
           if (!t0) t0 = +(w.dataset.lead || 0);
           wIdx = idx;
           w.dataset.idx = String(idx);
-          var rail = w.parentNode;
-          if (rail && rail.classList.contains('wrail')) {
-            /* جای اولیه باید بی‌درنگ بنشیند. اگر ترنزیشن روی همین ترجمه
-               فعال باشد، نوار از وسط صفحه سُر می‌خورد؛ یک فریم ترنزیشن را
-               خاموش می‌کنیم و بعد روشنش می‌گذاریم تا جابه‌جایی‌های بعدی نرم
-               باشند. */
-            if (!w.dataset.placed) {
-              w.dataset.placed = '1';
-              rail.style.transition = 'none';
-              requestAnimationFrame(function () {
-                rail.style.transition = '';
-              });
-            }
-            rail.style.transform = 'translateX(' + Math.round(t0 - idx * step) + 'px)';
+          /* جابه‌جایی روی خودِ نوار است، نه روی ریل: ریل قابِ برشِ ثابتِ
+             تمام‌عرض است و اگر او هم ترجمه بخورد، برش همراه کارت‌ها می‌رود
+             و کارت‌ها از قاب بیرون می‌زنند. */
+          if (!w.dataset.placed) {
+            w.dataset.placed = '1';
+            w.style.transition = 'none';
+            requestAnimationFrame(function () {
+              w.style.transition = '';
+            });
           }
+          w.style.transform = 'translateX(' + Math.round(t0 - idx * step) + 'px)';
         }
         function walletStep1(w, dir) {
           if (!w.dataset.step) return;
