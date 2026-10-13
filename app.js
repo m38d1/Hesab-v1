@@ -54,7 +54,55 @@
           HIDE = localStorage.getItem(HIDEK) === '1';
         } catch (e) {}
         var fi = function (n) {
-          return fr0(S.unit === 'R' ? Math.round(n * 10) : n);
+          /* در تومان هم عدد باید صحیح بماند. بدون این گرد کردن، موجودیِ
+             کسری (مثلاً از جمع و تفریق) اعشار نشان می‌داد و در کارت بانکی
+             جایی ندارد. */
+          return fr0(S.unit === 'R' ? Math.round(n * 10) : Math.round(n));
+        };
+        /* ارقام فارسی برای فیلدی که اصلاً پول نیست (شمارهٔ کارت). */
+        var fi0 = function (s) {
+          return String(s || '').replace(/[0-9]/g, function (d) {
+            return '۰۱۲۳۴۵۶۷۸۹'[d];
+          });
+        };
+        /* یک، دو، سه … برای نوشتن مبلغ روی کارت. ارقام فارسی با اعداد
+           لاتین نوشته می‌شوند چون خواناتر است و با بقیهٔ رابط هم‌خوان. */
+        var WD = ['صفر', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه'],
+          WT = ['ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 'شانزده', 'هفده', 'هجده', 'نوزده'],
+          WY = ['بیست', 'سی', 'چهل', 'پنجاه', 'شصت', 'هفتاد', 'هشتاد', 'نود'],
+          WH = ['', 'صد', 'دویست', 'سیصد', 'چهارصد', 'پانصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'],
+          WM = ['', ' هزار', ' میلیون', ' میلیارد', ' بیلیون', ' تریلیون'],
+          wtri = function (v) {
+            var out = [];
+            if (v >= 100) out.push(WH[Math.floor(v / 100)]);
+            var r = v % 100;
+            if (r) out.push(r < 10 ? WD[r] : r < 20 ? WT[r - 10] : r % 10 ? WY[Math.floor(r / 10) - 2] + ' و ' + WD[r % 10] : WY[Math.floor(r / 10) - 2]);
+            return out.join(' و ');
+          };
+        var words = function (v) {
+          v = Math.floor(Math.abs(Number(v) || 0));
+          if (!v) return 'صفر';
+          var g = [],
+            i = 0,
+            c;
+          while (v > 0 && i < WM.length) {
+            /* گروه صفر باید حذف شود. «صفر هزار» غلط است و رشتهٔ « هزار»
+               هم چون خالی نیست از صافیِ filter رد می‌شد. */
+            c = v % 1000;
+            if (c) g.push([c, i]);
+            v = Math.floor(v / 1000);
+            i++;
+          }
+          /* در فارسی فقط «هزار» بدون «یک» می‌آید: ۱۰۰۰ می‌شود «هزار»،
+             ولی ۱۰۰۰۰۰۰ «یک میلیون» است و ۱۰۰۰۰۰۰۰۰ «یک میلیارد».
+             این هم فقط وقتی که هزار تنها گروه باشد؛ ۱۰۰۱ «یک هزار و یک» است. */
+          if (g.length === 1 && g[0][0] === 1 && g[0][1] === 1) return 'هزار';
+          return g
+            .reverse()
+            .map(function (x) {
+              return wtri(x[0]) + WM[x[1]];
+            })
+            .join(' و ');
         };
         var fa = function (n) {
           return HIDE ? '•••' : fi(n);
@@ -121,6 +169,18 @@
           S.assets = arr(S.assets);
           S.debts = arr(S.debts);
           S.aem = arr(S.aem);
+          /* شمارهٔ کارت و رنگ کارت روی پشت کارت دیده می‌شوند. هر دو اختیاری‌اند
+             و باید همیشه هم‌طول با فهرست حساب‌ها بمانند. */
+          S.acno = arr(S.acno).map(function (x) {
+            return String(digits(typeof x === 'string' ? x : '')).slice(0, 19);
+          });
+          S.acol = arr(S.acol).map(function (x) {
+            x = parseInt(x, 10);
+            return x >= 0 && x < 5 ? x : 0;
+          });
+          while (S.aem.length < S.accs.length) S.aem.push('');
+          while (S.acno.length < S.accs.length) S.acno.push('');
+          while (S.acol.length < S.accs.length) S.acol.push(0);
           S.bud = S.bud && typeof S.bud === 'object' && !Array.isArray(S.bud) ? S.bud : {};
           while (S.ob.length < S.accs.length) S.ob.push(0);
           S.unit = S.unit === 'R' ? 'R' : 'T';
@@ -163,7 +223,6 @@
             localStorage.setItem(KEY, JSON.stringify(S));
           } catch (e) {}
           mirror();
-          if (!syApplying) syDirty();
         }
         /* Date.now() has millisecond resolution, so two entries written in the same tick get
            the same id — and deleting one then deletes every row sharing it. This generator
@@ -528,10 +587,19 @@
           return by;
         }
         function mhead(title) {
+          /* وقتی روی ماهی غیر از ماه جاری هستیم، راه برگشت لازم است.
+             data-m="0" یعنی همین ماه جاری؛ shift خودش صفر را به ماه
+             جاری می‌برد، پس فقط باید دکمه را نشان بدهیم. */
+          var tp = parts(today()),
+            off = tp.y !== cur.y || tp.m !== cur.m;
           return (
             '<div class="head"><h1>' +
             title +
-            '</h1><div class="mn"><button data-m="-1" aria-label="ماه قبل"><svg class="chv" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button><span>' +
+            '</h1><div class="mn">' +
+            (off
+              ? '<button data-m="0" class="mnow" aria-label="برگشت به امروز">امروز</button>'
+              : '') +
+            '<button data-m="-1" aria-label="ماه قبل"><svg class="chv" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button><span>' +
             MN[cur.m - 1] +
             ' ' +
             String(cur.y).replace(/\d/g, function (d) {
@@ -879,7 +947,6 @@
         function set() {
           return (
             '<div class="head"><h1>تنظیمات</h1></div>' +
-            syncHtml() +
             '<div class="card"><h2>ظاهر</h2><div class="seg" style="margin:0">' +
             [
               ['auto', 'خودکار'],
@@ -1296,7 +1363,9 @@
             (l ? fr0(l.count) : '') +
             '"></label><label>قسط‌های پرداخت‌شده<input id="lp" inputmode="numeric" placeholder="۰" value="' +
             (l ? fr0(l.paid) : '') +
-            '"></label><label>تاریخ اولین قسط<button type="button" id="fd" data-x="cal" style="color:var(--blue);font-weight:600;font-size:16px"></button></label><label>حساب پرداخت<select id="lk">' +
+            '"></label><label>پرداخت اولیه<input id="lq" class="amt" inputmode="numeric" placeholder="۰"></label>' +
+            '<p style="margin:-6px 0 0;font-size:12.5px;color:var(--mute);line-height:1.7">اگر موقع گرفتن وام پیش‌پرداختی دادی، اینجا بنویس تا همان موقع یک تراکنش ثبت شود.</p>' +
+            '<label>تاریخ اولین قسط<button type="button" id="fd" data-x="cal" style="color:var(--blue);font-weight:600;font-size:16px"></button></label><label>حساب پرداخت<select id="lk">' +
             AO(-1)
               .map(function (i) {
                 return (
@@ -1329,6 +1398,10 @@
             if (!n || !a || !c) return;
             /* paid can never exceed the new count, and the start date is a real date */
             var rec = { name: n, amount: a, count: c, paid: Math.min(Math.max(0, p), c), first: getDate(), acc: +$('lk').value };
+            /* پیش‌پرداخت، اگر کاربر مبلغی نوشته باشد. جدا از شمارش قسط‌هاست:
+               ممکن است مبلغش برابر یک قسط کامل نباشد، پس paid را دست نمی‌زنیم
+               و فقط یک تراکنش واقعی ثبت می‌کنیم. */
+            var down = P($('lq') ? $('lq').value : '');
             if (k === 'lsave' && l) {
               /* instalments already posted for this loan follow the new amount */
               if (l.amount !== a) {
@@ -1340,6 +1413,10 @@
                 l[k2] = rec[k2];
               });
             } else S.loans.push(Object.assign({ id: nid() }, rec));
+            if (down) {
+              S.tx.push({ id: nid(), type: 'out', amount: down, cat: 'اقساط', acc: rec.acc || 0, date: today(), note: rec.name + ' — پیش‌پرداخت' });
+              cur = parts(today());
+            }
           } else if (l) {
             if (k === 'ldel')
               S.loans = S.loans.filter(function (x) {
@@ -2071,35 +2148,145 @@
           );
         }
         function accCard() {
+          /* هر حساب یک سطر است که با کلیک باز می‌شود. ویرایش درجا حذف شد
+             چون جای کم بود و شمارهٔ کارت و رنگ جایی نداشت. */
           return (
-            '<div class="card"><h2>حساب‌ها<small>نام و موجودی اولیه</small></h2>' +
+            '<div class="card"><h2>حساب‌ها<small>برای ویرایش روی هرکدام بزن</small></h2>' +
             AO(-1)
               .map(function (i) {
-                var n = ACCS[i];
                 return (
-                  '<div style="display:flex;gap:8px;margin-bottom:8px"><button data-eo="' +
+                  '<button class="arow" data-acc="' +
                   i +
-                  '" aria-label="ایموجی حساب" class="search" style="margin:0;width:52px;padding:6px 0;font-size:22px">' +
+                  '"><span class="ae">' +
                   esc(S.aem[i] || AIC[i] || '👛') +
-                  '</button><input class="search" style="margin:0;flex:1" data-an="' +
-                  i +
-                  '" value="' +
-                  n +
-                  '" aria-label="نام حساب"><input class="search" style="margin:0;width:120px;text-align:left" data-ob="' +
-                  i +
-                  '" inputmode="numeric" placeholder="موجودی اولیه" value="' +
-                  (S.ob[i] ? fi(S.ob[i]) : '') +
-                  '">' +
-                  (AO(-1).length > 1
-                    ? '<button data-ad="' + i + '" aria-label="حذف حساب" style="color:var(--red);font-size:22px;padding:0 4px">×</button>'
-                    : '') +
-                  '</div>'
+                  '</span><span class="an">' +
+                  esc(ACCS[i]) +
+                  '</span><span class="ab">' +
+                  fa(accBal(i)) +
+                  '<i>' +
+                  (S.unit === 'R' ? 'ریال' : 'تومان') +
+                  '</i></span>' +
+                  (S.acno[i] ? '<span class="ad">⋮</span>' : '') +
+                  '</button>'
                 );
               })
               .join('') +
             accAdd() +
             '</div>'
           );
+        }
+        /* مودال ویرایش حساب: نام، ایموجی، موجودی اولیه، شمارهٔ کارت، رنگ. */
+        function openAcc(i) {
+          var GR = [
+            (ACC[S.accent] || ACC.blue).g,
+            ACC.green.g,
+            ACC.purple.g,
+            ACC.orange.g,
+            ACC.teal.g,
+          ];
+          $('sh').innerHTML =
+            '<div class="grab"></div><h3>ویرایش حساب</h3>' +
+            '<div class="fld"><label>نام حساب<input id="an2" value="' +
+            esc(ACCS[i]) +
+            '" style="direction:rtl;text-align:left"></label>' +
+            '<label>موجودی اولیه<input id="ob2" class="amt" inputmode="numeric" placeholder="۰" value="' +
+            (S.ob[i] ? fi(S.ob[i]) : '') +
+            '"></label>' +
+            '<label>شمارهٔ کارت<input id="cn2" class="amt" inputmode="numeric" placeholder="۶۰۲۲۹۹۷۵۱۲۳۴۵۶۷۸" value="' +
+            fi0(S.acno[i] || '') +
+            '" style="direction:ltr;text-align:left"></label>' +
+            '<label>ایموجی<input id="em2" value="' +
+            esc(S.aem[i] || AIC[i] || '👛') +
+            '" style="font-size:26px;text-align:center" maxlength="4"></label>' +
+            '<label>رنگ کارت</label><div class="swr" id="cw">' +
+            GR.map(function (g, j) {
+              return (
+                '<button data-cw="' +
+                j +
+                '" aria-label="رنگ ' +
+                (j + 1) +
+                '" style="background:' +
+                g +
+                '"' +
+                ((S.acol[i] || 0) === j ? ' class="on"' : '') +
+                '></button>'
+              );
+            }).join('') +
+            '</div></div>' +
+            '<div style="display:flex;gap:8px">' +
+            '<button class="btn g" data-x="accsave">ذخیره</button>' +
+            (AO(-1).length > 1
+              ? '<button class="btn d" data-x="accdel">حذف حساب</button>'
+              : '') +
+            '</div><p style="margin:10px 0 0;font-size:12.5px;color:var(--mute);line-height:1.7">شمارهٔ کارت روی پشت کارتِ صفحهٔ خانه نشان داده می‌شود. برنامه آن را فقط رمز می‌کند و جایی به‌جز ابری که خودت روشن کنی نمی‌فرستد.</p>';
+          accEd = { i: i, col: S.acol[i] || 0 };
+          showSheet();
+        }
+        function accSave() {
+          if (!accEd) return;
+          var i = accEd.i,
+            nm = ($('an2').value || '').replace(/[<>&"]/g, '').trim(),
+            em = ($('em2').value || '').trim().slice(0, 4);
+          if (!nm) return;
+          ACCS[i] = nm;
+          S.accs = ACCS;
+          S.aem[i] = em;
+          S.ob[i] = P($('ob2').value);
+          /* شمارهٔ کارت فقط رقم است و حداکثر ۱۹ رقم. digits() ارقام فارسی و عربی
+             را هم می‌پذیرد، پس کاربر می‌تواند با هر صفحه‌کلیدی بنویسد. */
+          S.acno[i] = String(digits($('cn2').value || '')).slice(0, 19);
+          S.acol[i] = accEd.col;
+          accEd = null;
+          save();
+          closeSheet();
+          render();
+        }
+        function accDel() {
+          if (!accEd) return;
+          var i = accEd.i;
+          if (AO(-1).length <= 1) return;
+          accEd = null;
+          /* حذف حساب: تراکنش‌های گذشته‌اش می‌مانند ولی شمارهٔ حساب‌ها
+             بعد از آن جابه‌جا می‌شود، پس باید همان‌جا بمانند. */
+          S.accs.splice(i, 1);
+          S.aem.splice(i, 1);
+          S.acno.splice(i, 1);
+          S.acol.splice(i, 1);
+          S.ob.splice(i, 1);
+          S.off = S.off.map(function (x) {
+            return x > i ? x - 1 : x === i ? 0 : x;
+          });
+          S.tx.forEach(function (t) {
+            if (t.acc === i) t.acc = 0;
+            else if (t.acc > i) t.acc -= 1;
+            if (t.type === 'tf') {
+              if (t.to === i) t.to = 0;
+              else if (t.to > i) t.to -= 1;
+            }
+          });
+          S.tx.forEach(function (t) {
+            if (t.acc == null) t.acc = 0;
+          });
+          S.loans.forEach(function (l) {
+            if (l.acc === i) l.acc = 0;
+            else if (l.acc > i) l.acc -= 1;
+          });
+          S.debts.forEach(function (d) {
+            if (d.acc === i) d.acc = 0;
+            else if (d.acc > i) d.acc -= 1;
+          });
+          S.rec.forEach(function (r) {
+            if (r.acc === i) r.acc = 0;
+            else if (r.acc > i) r.acc -= 1;
+            if (r.type === 'tf') {
+              if (r.to === i) r.to = 0;
+              else if (r.to > i) r.to -= 1;
+            }
+          });
+          ACCS = S.accs;
+          save();
+          closeSheet();
+          render();
         }
         function walletHtml(total, inc, exp) {
           var G = [
@@ -2112,11 +2299,10 @@
             ],
             u = S.unit === 'R' ? 'ریال' : 'تومان',
             ct = '<svg viewBox="0 0 24 24"><path d="M8.5 8.5a5 5 0 0 1 0 7M12 6a8.5 8.5 0 0 1 0 12M15.5 3.5a12 12 0 0 1 0 17"/></svg>';
-          function cd(g, t, v, l, r) {
-            return (
-              '<div class="wc" style="background:' +
-              g +
-              '"><div class="wt"><span>' +
+          function cd(g, t, v, l, r, b) {
+            /* b = پشت کارت. کارتی که پشت ندارد یک‌رویه است و برنمی‌گردد. */
+            var f =
+              '<div class="wff"><div class="wt"><span>' +
               t +
               '</span>' +
               r +
@@ -2129,8 +2315,49 @@
               l +
               '</span>' +
               ct +
+              '</div></div>';
+            return (
+              '<div class="wc' +
+              (b ? ' fl' : '') +
+              '"' +
+              (b ? ' data-wc="' + b.i + '"' : '') +
+              ' style="background:' +
+              g +
+              '"><div class="wi">' +
+              f +
+              (b ? '<div class="wfb">' + b.h + '</div>' : '') +
               '</div></div>'
             );
+          }
+          /* پشت کارت: شمارهٔ کارت با رقم‌های فارسی و گروه چهارتایی،
+             و مبلغ به حروف. اگر شماره‌ای ثبت نشده باشد، به‌جای خالی
+             ماندن می‌گوید از کجا پر شود. */
+          function cnoFmt(s) {
+            var s = String(digits(s || '')).slice(0, 19);
+            if (!s) return '';
+            return s
+              .replace(/[0-9]/g, function (d) {
+                return '۰۱۲۳۴۵۶۷۸۹'[d];
+              })
+              .replace(/(.{4})/g, '$1 ')
+              .trim();
+          }
+          function cardBack(i, bal) {
+            var no = cnoFmt(S.acno[i]);
+            return {
+              i: i,
+              h:
+                '<div class="wbi"><span class="bt">' +
+                (no ? 'شمارهٔ کارت' : 'شمارهٔ کارت ثبت نشده') +
+                '</span><b class="bnr' +
+                (no ? '' : ' dim') +
+                '">' +
+                esc(no || 'از تنظیمات بساز') +
+                '</b></div>' +
+                '<div class="wbi g"><span class="bt">مبلغ به حروف</span><b class="bnr sm">' +
+                esc(words(S.unit === 'R' ? Math.round(bal * 10) : Math.round(bal))) +
+                '</b></div>',
+            };
           }
           var h = cd(
             G[0],
@@ -2146,12 +2373,16 @@
               ' ⇄</button></span>',
           );
           AO(-1).forEach(function (i, j) {
+            /* هر حساب کارت خودش را دارد: رنگش از acol می‌آید و پشتش شمارهٔ
+               کارت و مبلغ به حروف. */
+            var bal = accBal(i);
             h += cd(
-              G[(j + 1) % G.length],
+              G[S.acol[i] != null ? S.acol[i] : (j + 1) % G.length],
               esc(ACCS[i]),
-              accBal(i),
+              bal,
               'موجودی حساب',
               '<span style="font-size:20px">' + esc(S.aem[i] || AIC[i] || '👛') + '</span>',
+              cardBack(i, bal),
             );
           });
           if (S.assets.length) h += cd(G[4], 'دارایی غیرنقدی', assetsTotal(), 'قیمت دستی', '<span style="font-size:20px">💎</span>');
@@ -2167,7 +2398,12 @@
         }
         var sw = null,
           swD = 0,
-          tmr = null;
+          tmr = null,
+          /* کدام کارتِ حساب چرخیده است. باید بیرون از walletHtml بماند،
+             وگرنه هر render وضعیت را پاک می‌کرد. */
+          flipped = {},
+          /* حسابی که مودال ویرایشش باز است */
+          accEd = null;
         function buzz() {
           try {
             navigator.vibrate && navigator.vibrate(12);
@@ -2677,7 +2913,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam]',
+            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam],[data-acc],[data-cw]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -2689,8 +2925,10 @@
             render();
             scrollTo(0, 0);
             aniApp();
-          } else if (d.m) {
-            var p = shift(cur.y, cur.m, +d.m);
+          /* d.m صفر هم معنی دارد («برگشت به امروز»)، پس باید با !== undefined
+             سنجیده شود نه با if معمولی که صفر را falsy می‌بیند. */
+          } else if (d.m !== undefined) {
+            var p = shift(cur.y, cur.m, +d.m || 0);
             cur.y = p[0];
             cur.m = p[1];
             render();
@@ -2723,7 +2961,15 @@
             dateSel(j2g(cal.y, cal.m, +d.pd));
             closeCal();
           } else if (d.goal) openGoal(+d.goal);
-          else if (d.eo) openEmoji(+d.eo);
+          else if (d.acc !== undefined) openAcc(+d.acc);
+          else if (d.cw !== undefined && accEd) {
+            /* انتخاب رنگ کارت در مودال. فقط کلاس عوض می‌شود تا انتخاب
+               تا لحظهٔ ذخیره بماند. */
+            accEd.col = +d.cw;
+            Array.prototype.forEach.call(document.querySelectorAll('#cw button'), function (b) {
+              b.classList.toggle('on', b === el);
+            });
+          } else if (d.eo) openEmoji(+d.eo);
           else if (d.ep) {
             var ep = d.ep.split('|');
             S.aem[+ep[0]] = ep[1];
@@ -2862,6 +3108,11 @@
             if (!an) return;
             S.accs.push(an);
             S.ob.push(P($('ao').value));
+            /* حساب تازه باید جای خالی در همهٔ فهرست‌های موازی داشته باشد،
+               وگرنه شمارهٔ کارت و رنگِ حساب بعدی به حساب تازه می‌چسبد. */
+            S.aem.push('');
+            S.acno.push('');
+            S.acol.push(0);
             save();
             render();
           } else if (d.x === 'addppl') {
@@ -2873,6 +3124,8 @@
             save();
             render();
           } else if (d.x === 'asopen') openAsset();
+          else if (d.x === 'accsave') accSave();
+          else if (d.x === 'accdel') accDel();
           else if (/^as(save|del)$/.test(d.x)) assetAct(d.x);
           else if (d.x === 'dnew') openDebt('', 'g');
           else if (d.de) openDebtEntry(+d.de);
@@ -2985,15 +3238,7 @@
             smsGo();
           } else if (d.x === 'smsave') {
             smsSave();
-          } else if (d.x === 'syauth') syAuthSheet('login');
-          else if (d.sam) syAuthSheet(d.sam);
-          else if (d.x === 'synow') syNow();
-          else if (d.x === 'sypw') syPwSheet();
-          else if (d.x === 'sydel') syDelSheet();
-          else if (d.x === 'syout') syLogout();
-          else if (/^sy(authgo|pwgo|delgo)$/.test(d.x)) syGo(el);
-          else if (/^syc-(merge|cloud|local)$/.test(d.x)) syResolve(d.x.slice(4));
-          else if (d.x === 'rst') {
+          } else if (d.x === 'rst') {
             if (el.dataset.s) {
               snapAct('همه داده‌ها حذف شد', function () {
                 S = { tx: [], bud: {}, theme: S.theme };
@@ -3003,13 +3248,13 @@
               delete el.dataset.s;
             } else {
               el.dataset.s = 1;
-              el.textContent = SY ? 'برای تأیید دوباره بزنید (نسخه ابری هم پاک می‌شود)' : 'برای تأیید دوباره بزنید';
+              el.textContent = 'برای تأیید دوباره بزنید';
             }
           }
         });
         document.addEventListener('input', function (e) {
           var t = e.target;
-          if (t.id === 'fa' || t.id === 'ga' || t.id === 'gt' || t.id === 'la' || t.id === 'lc' || t.id === 'lp' || t.id === 'ao' || t.id === 'ap' || t.id === 'ac' || t.id === 'da') {
+          if (t.id === 'fa' || t.id === 'ga' || t.id === 'gt' || t.id === 'la' || t.id === 'lc' || t.id === 'lp' || t.id === 'lq' || t.id === 'ob2' || t.id === 'ao' || t.id === 'ap' || t.id === 'ac' || t.id === 'da') {
             var v = digits(t.value);
             t.value = v ? fr0(v) : '';
           } else if (t.dataset.sam !== undefined) {
@@ -3108,459 +3353,25 @@
         $('plus').onclick = function () {
           openSheet();
         };
+        /* چرخش کارت: کلیک روی کارتِ حساب، رو و پشتش را عوض می‌کند. حالت
+           چرخیده در متغیر می‌ماند تا با هر render دوباره بسته نشود. */
+        document.addEventListener('click', function (e) {
+          var w = e.target.closest && e.target.closest('.wc.fl');
+          if (!w) return;
+          var i = +w.dataset.wc;
+          if (!(i >= 0)) return;
+          /* دکمه‌های روی کارت (تومان ⇄ و پنهان‌سازی) نباید کارت را برگردانند */
+          if (e.target.closest('button')) return;
+          if (flipped[i]) flipped[i] = 0;
+          else flipped[i] = 1;
+          w.classList.toggle('on', !!flipped[i]);
+        });
         document.addEventListener('keydown', function (e) {
           if (e.key === 'Escape') {
             closeCal();
             closeSheet();
           }
         });
-        /* ---------- Cloud sync: end-to-end encrypted, last-writer + merge on conflict ---------- */
-        /* Offline-only builds ship <meta name="hesab-sync" content="off">: the sync UI and network calls are disabled. */
-        var SYNC_OFF = !!document.querySelector('meta[name="hesab-sync"][content="off"]');
-        var SYK = 'hesab-sync-v1',
-          SY = null,
-          syApplying = false,
-          syBusy = false,
-          syT = null,
-          syMsg = '',
-          syRemote = null;
-        var TE = new TextEncoder(),
-          TD = new TextDecoder();
-        var SYE = {
-          bad_credentials: 'نام کاربری یا رمز عبور اشتباه است.',
-          taken: 'این نام کاربری قبلاً ثبت شده است.',
-          locked: 'به‌دلیل چند تلاش ناموفق، ورود موقتاً قفل شد. چند دقیقه بعد دوباره امتحان کن.',
-          invalid: 'ورودی نامعتبر است.',
-          full: 'ظرفیت ثبت‌نام فعلاً تکمیل است.',
-          too_large: 'حجم داده از حد مجاز بیشتر است.',
-          unauthorized: 'نشست منقضی شده؛ دوباره وارد شو.',
-          rate_limited: 'درخواست‌ها زیاد بود؛ کمی بعد دوباره امتحان کن.',
-          server: 'خطای سرور؛ کمی بعد دوباره امتحان کن.',
-        };
-        function syLoad() {
-          try {
-            SY = JSON.parse(localStorage.getItem(SYK));
-          } catch (e) {
-            SY = null;
-          }
-          if (!SY || !SY.u || !SY.token || !SY.key) SY = null;
-        }
-        function syStore() {
-          try {
-            if (SY) localStorage.setItem(SYK, JSON.stringify(SY));
-            else localStorage.removeItem(SYK);
-          } catch (e) {}
-        }
-        function b64(buf) {
-          var a = new Uint8Array(buf),
-            s = '';
-          for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
-          return btoa(s);
-        }
-        function unb64(s) {
-          var b = atob(s),
-            a = new Uint8Array(b.length);
-          for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
-          return a;
-        }
-        function pbk(pw, salt) {
-          return crypto.subtle.importKey('raw', TE.encode(pw), 'PBKDF2', false, ['deriveBits']).then(function (k) {
-            return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: TE.encode(salt), iterations: 210000, hash: 'SHA-256' }, k, 256);
-          });
-        }
-        /* Two independent keys from one password: "auth" goes to the server, "enc" never leaves the device. */
-        function syKeys(u, pw) {
-          return Promise.all([pbk(pw, 'hesab-auth:' + u), pbk(pw, 'hesab-enc:' + u)]).then(function (r) {
-            return { auth: b64(r[0]), enc: b64(r[1]) };
-          });
-        }
-        function aesKey(b) {
-          return crypto.subtle.importKey('raw', unb64(b), 'AES-GCM', false, ['encrypt', 'decrypt']);
-        }
-        function seal(keyB64, text) {
-          var iv = crypto.getRandomValues(new Uint8Array(12));
-          return aesKey(keyB64)
-            .then(function (k) {
-              return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, k, TE.encode(text));
-            })
-            .then(function (ct) {
-              return { iv: b64(iv), ct: b64(ct) };
-            });
-        }
-        function unseal(keyB64, iv, ct) {
-          return aesKey(keyB64)
-            .then(function (k) {
-              return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(iv) }, k, unb64(ct));
-            })
-            .then(function (p) {
-              return JSON.parse(TD.decode(p));
-            });
-        }
-        function syUser(u) {
-          return String(u || '').trim().normalize('NFKC').toLowerCase();
-        }
-        function syUserOk(u) {
-          return /^[\p{L}\p{N}_.-]{3,32}$/u.test(u);
-        }
-        function syApi(method, path, body, tok) {
-          var h = { 'content-type': 'application/json' };
-          if (tok) h.authorization = 'Bearer ' + tok;
-          return fetch('/api' + path, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' }).then(function (r) {
-            return r
-              .json()
-              .catch(function () {
-                return {};
-              })
-              .then(function (j) {
-                return { ok: r.ok, status: r.status, j: j };
-              });
-          });
-        }
-        function syErr(r) {
-          return SYE[r.j && r.j.error] || (r.status === 429 ? SYE.rate_limited : 'خطا (' + r.status + ')');
-        }
-        function syHas() {
-          return !!(S.tx.length || S.loans.length || S.assets.length || S.debts.length || S.goals.length || S.rec.length || S.ppl.length);
-        }
-        function syPersist() {
-          try {
-            localStorage.setItem(KEY, JSON.stringify(S));
-          } catch (e) {}
-        }
-        function syDrop(msg) {
-          SY = null;
-          syStore();
-          syMsg = msg || '';
-          if (tab === 'set') render();
-        }
-        function syDirty() {
-          if (!SY || syApplying) return;
-          SY.dirty = true;
-          SY.ver = (SY.ver || 0) + 1;
-          syStore();
-          clearTimeout(syT);
-          syT = setTimeout(syPush, 10000); /* batch edits: fewer database wake-ups */
-          syRefresh();
-        }
-        function syStatusHtml() {
-          if (!SY) return '';
-          if (syBusy) return '<small class="syn">در حال همگام‌سازی…</small>';
-          if (syMsg) return '<small class="syn" style="color:var(--red)">' + esc(syMsg) + '</small>';
-          if (SY.dirty) return '<small class="syn">تغییرات منتظر ارسال است…</small>';
-          var t = SY.last ? new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(new Date(SY.last)) : '';
-          return '<small class="syn" style="color:var(--grn)">✓ همگام' + (t ? ' · آخرین: ' + t : '') + '</small>';
-        }
-        function syRefresh() {
-          var el = $('sys');
-          if (el) el.innerHTML = syStatusHtml();
-        }
-        function syncHtml() {
-          if (SYNC_OFF) return '';
-          if (!SY)
-            return '<div class="card"><h2>همگام‌سازی ابری</h2><p class="syn">با ساخت حساب، داده‌هایت روی چند دستگاه همگام می‌شود. داده قبل از ارسال روی همین دستگاه رمزگذاری می‌شود و سرور نمی‌تواند آن را بخواند.</p>' + (syMsg ? '<p class="syn" style="color:var(--red)">' + esc(syMsg) + '</p>' : '') + '<button class="btn" data-x="syauth" style="margin-top:0">ورود یا ثبت‌نام</button></div>';
-          return '<div class="card"><h2>همگام‌سازی ابری<small>' + esc(SY.u) + '</small></h2><div id="sys">' + syStatusHtml() + '</div><button class="btn g" data-x="synow">همگام‌سازی الان</button><button class="btn g" data-x="sypw">تغییر رمز عبور</button><button class="btn g" data-x="syout">خروج از حساب</button><button class="btn d" data-x="sydel">حذف حساب ابری</button></div>';
-        }
-        function syApply(data, rev) {
-          syApplying = true;
-          S = data;
-          norm();
-          syPersist();
-          syApplying = false;
-          SY.rev = rev;
-          SY.dirty = false;
-          SY.last = Date.now();
-          syMsg = '';
-          syStore();
-          render();
-        }
-        function syMerge(a, b) {
-          /* a = this device, b = cloud. Union by id; settings come from the cloud except where this device has more. */
-          var m = JSON.parse(JSON.stringify(b));
-          ['tx', 'rec', 'goals', 'loans', 'assets', 'debts'].forEach(function (k) {
-            var seen = {};
-            m[k] = (b[k] || []).slice();
-            m[k].forEach(function (x) {
-              seen[x.id] = 1;
-            });
-            (a[k] || []).forEach(function (x) {
-              if (!seen[x.id]) m[k].push(x);
-            });
-          });
-          m.ppl = (b.ppl || []).concat((a.ppl || []).filter(function (n) { return (b.ppl || []).indexOf(n) < 0; }));
-          m.bud = Object.assign({}, b.bud, a.bud);
-          if (a.cl && m.cl)
-            ['out', 'in'].forEach(function (g) {
-              var names = (m.cl[g] || []).map(function (c) { return c.n; });
-              (a.cl[g] || []).forEach(function (c) {
-                if (names.indexOf(c.n) < 0) m.cl[g].push(c);
-              });
-            });
-          if ((a.accs || []).length > (b.accs || []).length) {
-            m.accs = a.accs;
-            m.ob = a.ob;
-            m.off = a.off;
-            m.aem = a.aem;
-          }
-          m.name = b.name || a.name;
-          return m;
-        }
-        function syConflict() {
-          if (!syRemote) return;
-          if ($('sh').classList.contains('on')) return void setTimeout(syConflict, 3000);
-          $('sh').innerHTML =
-            '<div class="grab"></div><h3>نسخه‌ها فرق دارند</h3><p class="syn">هم نسخه‌ی ابری و هم نسخه‌ی این دستگاه تغییر کرده‌اند. کدام را نگه داریم؟</p>' +
-            '<button class="btn" data-x="syc-merge">ادغام (پیشنهادی)</button><p class="syn">تراکنش‌ها و موارد جدید هر دو طرف حفظ می‌شود. چیزی که در یکی حذف شده و در دیگری مانده، برمی‌گردد.</p>' +
-            '<button class="btn g" data-x="syc-cloud">استفاده از نسخه‌ی ابری</button><button class="btn g" data-x="syc-local">نگه داشتن نسخه‌ی این دستگاه</button>';
-          showSheet();
-        }
-        function syResolve(c) {
-          var r = syRemote;
-          syRemote = null;
-          if (!r || !SY) return;
-          if (c === 'cloud') syApply(r.data, r.rev);
-          else {
-            if (c === 'merge') {
-              syApplying = true;
-              S = syMerge(S, r.data);
-              norm();
-              syPersist();
-              syApplying = false;
-            }
-            SY.rev = r.rev;
-            SY.dirty = true;
-            SY.ver = (SY.ver || 0) + 1;
-            syStore();
-            render();
-            syPush();
-          }
-          closeSheet();
-        }
-        function syPull(initial) {
-          if (!SY || syBusy) return Promise.resolve();
-          syBusy = true;
-          syMsg = '';
-          syRefresh();
-          return syApi('GET', '/data', null, SY.token)
-            .then(function (r) {
-              if (r.status === 401) return syDrop('نشست منقضی شد؛ دوباره وارد شو.');
-              if (!r.ok) throw syErr(r);
-              var j = r.j;
-              if (!j.ct) {
-                SY.rev = j.rev;
-                if (syHas()) SY.dirty = true;
-                syStore();
-                return;
-              }
-              if (!initial && j.rev === SY.rev) return;
-              return unseal(SY.key, j.iv, j.ct).then(function (data) {
-                var localChanged = initial ? syHas() : SY.dirty;
-                if (!localChanged) syApply(data, j.rev);
-                else {
-                  syRemote = { rev: j.rev, data: data };
-                  syConflict();
-                }
-              });
-            })
-            .catch(function (e) {
-              syMsg = typeof e === 'string' ? e : 'همگام‌سازی انجام نشد (اتصال یا رمزگشایی).';
-            })
-            .then(function () {
-              syBusy = false;
-              syRefresh();
-            });
-        }
-        function syPush() {
-          if (!SY || syBusy || !SY.dirty || syRemote) return Promise.resolve();
-          syBusy = true;
-          syMsg = '';
-          var snap = JSON.stringify(S),
-            base = SY.rev,
-            ver = SY.ver || 0,
-            retry = false;
-          syRefresh();
-          return seal(SY.key, snap)
-            .then(function (p) {
-              return syApi('PUT', '/data', { baseRev: base, iv: p.iv, ct: p.ct }, SY.token);
-            })
-            .then(function (r) {
-              if (r.status === 401) return syDrop('نشست منقضی شد؛ دوباره وارد شو.');
-              if (r.status === 409) {
-                retry = true;
-                return;
-              }
-              if (!r.ok) throw syErr(r);
-              SY.rev = r.j.rev;
-              if ((SY.ver || 0) === ver) SY.dirty = false;
-              SY.last = Date.now();
-              syStore();
-            })
-            .catch(function (e) {
-              syMsg = typeof e === 'string' ? e : 'ارسال انجام نشد (بدون اتصال؟). بعداً دوباره تلاش می‌شود.';
-            })
-            .then(function () {
-              syBusy = false;
-              syRefresh();
-              if (retry) return syPull(false);
-            });
-        }
-        function syAuth(mode, u0, pw, pw2) {
-          var u = syUser(u0);
-          if (!syUserOk(u)) return Promise.reject('نام کاربری باید ۳ تا ۳۲ نویسه باشد (حروف، عدد، _ . -).');
-          if (pw.length < 8) return Promise.reject('رمز عبور حداقل ۸ نویسه باشد.');
-          if (mode === 'register' && pw !== pw2) return Promise.reject('تکرار رمز با رمز یکسان نیست.');
-          return syKeys(u, pw).then(function (k) {
-            return syApi('POST', mode === 'register' ? '/register' : '/login', { u: u, a: k.auth }).then(function (r) {
-              if (!r.ok) throw syErr(r);
-              SY = { u: u, token: r.j.token, key: k.enc, rev: r.j.rev || 0, dirty: false, ver: 0, last: 0 };
-              syStore();
-              if (mode === 'register' || r.j.empty) {
-                SY.dirty = true;
-                SY.ver = 1;
-                syStore();
-                return syPush();
-              }
-              return syPull(true);
-            });
-          });
-        }
-        function syAuthSheet(mode) {
-          var reg = mode === 'register';
-          $('sh').innerHTML =
-            '<div class="grab"></div><h3>همگام‌سازی ابری</h3><div class="seg"><button data-sam="login" aria-pressed="' + !reg + '">ورود</button><button data-sam="register" aria-pressed="' + reg + '">ثبت‌نام</button></div>' +
-            '<div class="fld"><label>نام کاربری<input id="syu" autocomplete="username" autocapitalize="off" spellcheck="false" style="direction:ltr"></label><label>رمز عبور<input id="syp" type="password" autocomplete="' + (reg ? 'new-password' : 'current-password') + '" style="direction:ltr"></label>' +
-            (reg ? '<label>تکرار رمز<input id="syp2" type="password" autocomplete="new-password" style="direction:ltr"></label>' : '') + '</div>' +
-            (reg ? '<p class="syn">داده‌ات روی همین دستگاه رمزگذاری می‌شود. اگر رمز را فراموش کنی، هیچ‌کس (حتی مدیر سایت) نمی‌تواند آن را بازیابی کند.</p>' : '') +
-            '<p class="syn" id="syerr" style="color:var(--red)"></p><button class="btn" data-x="syauthgo" data-mode="' + mode + '">' + (reg ? 'ساخت حساب' : 'ورود') + '</button>';
-          showSheet();
-        }
-        function syPwSheet() {
-          $('sh').innerHTML =
-            '<div class="grab"></div><h3>تغییر رمز عبور</h3><div class="fld"><label>رمز فعلی<input id="syo" type="password" autocomplete="current-password" style="direction:ltr"></label><label>رمز جدید<input id="syp" type="password" autocomplete="new-password" style="direction:ltr"></label><label>تکرار رمز جدید<input id="syp2" type="password" autocomplete="new-password" style="direction:ltr"></label></div><p class="syn">بعد از تغییر رمز، دستگاه‌های دیگر باید دوباره وارد شوند.</p><p class="syn" id="syerr" style="color:var(--red)"></p><button class="btn" data-x="sypwgo">تغییر رمز</button>';
-          showSheet();
-        }
-        function syDelSheet() {
-          $('sh').innerHTML =
-            '<div class="grab"></div><h3>حذف حساب ابری</h3><p class="syn">حساب و نسخه‌ی ابری داده‌هایت برای همیشه پاک می‌شود. داده‌ی روی همین دستگاه می‌ماند.</p><div class="fld"><label>رمز عبور<input id="syp" type="password" autocomplete="current-password" style="direction:ltr"></label></div><p class="syn" id="syerr" style="color:var(--red)"></p><button class="btn d" data-x="sydelgo">حذف حساب ابری</button>';
-          showSheet();
-        }
-        function syFail(e) {
-          var m = typeof e === 'string' ? e : 'اتصال به سرور برقرار نشد.';
-          if ($('syerr')) $('syerr').textContent = m;
-          var b = document.querySelector('#sh .btn');
-          if (b) b.disabled = false;
-        }
-        function syGo(el) {
-          var d = el.dataset.x;
-          el.disabled = true;
-          if ($('syerr')) $('syerr').textContent = '';
-          var val = function (id) {
-            return $(id) ? $(id).value : '';
-          };
-          if (d === 'syauthgo') {
-            syAuth(el.dataset.mode, val('syu'), val('syp'), val('syp2'))
-              .then(function () {
-                if (!syRemote) closeSheet();
-                render();
-              })
-              .catch(syFail);
-          } else if (d === 'sypwgo') {
-            var nw = val('syp');
-            if (nw.length < 8) return syFail('رمز جدید حداقل ۸ نویسه باشد.');
-            if (nw !== val('syp2')) return syFail('تکرار رمز با رمز جدید یکسان نیست.');
-            Promise.all([syKeys(SY.u, val('syo')), syKeys(SY.u, nw)])
-              .then(function (k) {
-                return (SY.dirty ? syPush() : Promise.resolve()).then(function () {
-                  if (!SY || SY.dirty) throw 'ابتدا همگام‌سازی را کامل کن (اتصال یا تعارض).';
-                  return syApi('GET', '/data', null, SY.token).then(function (r) {
-                    if (!r.ok) throw syErr(r);
-                    if (r.j.rev !== SY.rev) throw 'نسخه‌ی ابری جدیدتر است؛ اول همگام‌سازی کن.';
-                    return seal(k[1].enc, JSON.stringify(S)).then(function (p) {
-                      return syApi('POST', '/password', { a: k[0].auth, na: k[1].auth, iv: p.iv, ct: p.ct, baseRev: SY.rev }, SY.token).then(function (r2) {
-                        if (!r2.ok) throw syErr(r2);
-                        SY.key = k[1].enc;
-                        SY.rev = r2.j.rev;
-                        SY.last = Date.now();
-                        syStore();
-                      });
-                    });
-                  });
-                });
-              })
-              .then(function () {
-                closeSheet();
-                toast('رمز عبور تغییر کرد');
-                render();
-              })
-              .catch(syFail);
-          } else if (d === 'sydelgo') {
-            syKeys(SY.u, val('syp'))
-              .then(function (k) {
-                return syApi('POST', '/delete', { a: k.auth }, SY.token);
-              })
-              .then(function (r) {
-                if (!r.ok) throw syErr(r);
-                SY = null;
-                syStore();
-                closeSheet();
-                toast('حساب ابری حذف شد');
-                render();
-              })
-              .catch(syFail);
-          }
-        }
-        function syNow() {
-          if (!SY) return;
-          syPull(false).then(function () {
-            return syPush();
-          });
-        }
-        function syLogout() {
-          var tok = SY && SY.token;
-          SY = null;
-          syStore();
-          syMsg = '';
-          if (tok) syApi('POST', '/logout', null, tok).catch(function () {});
-          render();
-        }
-        function syBoot() {
-          if (SYNC_OFF) return;
-          syLoad();
-          var last = 0;
-          var run = function (force) {
-            if (!SY) return;
-            /* Returning to the tab re-syncs at most every 5 minutes (unless edits are waiting) to limit database wake-ups. */
-            if (!force && !SY.dirty && Date.now() - last < 300000) return;
-            last = Date.now();
-            syPull(false).then(function () {
-              if (SY && SY.dirty) return syPush();
-            });
-          };
-          run(true);
-          document.addEventListener('visibilitychange', function () {
-            if (!document.hidden) run(false);
-          });
-          window.addEventListener('online', function () {
-            run(true);
-          });
-        }
-        load();
-        runPending();
-        render();
-        /* Chain: the mirror must not be rewritten before the rescue has had its say,
-           or a fresh empty state would overwrite the only surviving copy. */
-        mirrorRescue().then(function () {
-          mirror();
-        });
-        storageInfo().then(function (r) {
-          stOk = r[0];
-          stEst = r[1];
-          if (tab === 'set') render();
-        });
-        aniApp();
-        syBoot();
-        if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
-      })();
-
     if ('serviceWorker' in navigator)
       window.addEventListener('load', function () {
         var reloading = false;
@@ -3591,3 +3402,19 @@
           }, 30 * 60 * 1000);
         }).catch(function () {});
       });
+        load();
+        runPending();
+        render();
+        /* Chain: the mirror must not be rewritten before the rescue has had its say,
+           or a fresh empty state would overwrite the only surviving copy. */
+        mirrorRescue().then(function () {
+          mirror();
+        });
+        storageInfo().then(function (r) {
+          stOk = r[0];
+          stEst = r[1];
+          if (tab === 'set') render();
+        });
+        aniApp();
+        if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
+      })();

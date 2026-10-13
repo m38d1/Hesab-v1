@@ -115,6 +115,17 @@
         color: var(--blue);
         font-size: 18px;
       }
+      /* دکمهٔ برگشت به امروز. عرضش با متن هماهنگ است، نه گرد. */
+      .mn button.mnow {
+        width: auto;
+        border-radius: 99px;
+        padding: 0 11px;
+        font-size: 12px;
+        font-weight: 700;
+        background: var(--blue);
+        color: #fff;
+        margin-inline-end: 4px;
+      }
       .mn span {
         font-size: 13.5px;
         font-weight: 600;
@@ -606,6 +617,12 @@
       .ani > *:nth-child(n + 5) {
         animation-delay: 0.1s;
       }
+      /* کیف پول از انیمیشن rise بیرون می‌ماند. fill-mode: both یک
+         stacking context می‌سازد و transform نهایی، حتی none، فضای
+         سه‌بعدی را می‌بندد — یعنی چرخش کارت از کار می‌افتاد. */
+      .ani > .wallet {
+        animation: none;
+      }
       @keyframes grow {
         from {
           transform: scaleX(0);
@@ -643,8 +660,76 @@
       .wc {
         transition: transform 0.2s;
       }
-      .wc:active {
+      /* سطر حساب در تنظیمات: کلیک‌پذیر، کل صفحه هدف لمس */
+      .arow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        text-align: start;
+        padding: 11px 12px;
+        margin-bottom: 8px;
+        border-radius: 14px;
+        background: var(--fill);
+        border: 1px solid transparent;
+        font: inherit;
+        color: var(--ink);
+        cursor: pointer;
+        transition:
+          transform 0.15s,
+          background 0.2s;
+      }
+      .arow:active {
         transform: scale(0.98);
+        background: var(--fill2, var(--fill));
+      }
+      .arow .ae {
+        font-size: 22px;
+        line-height: 1;
+        flex: none;
+        width: 30px;
+        text-align: center;
+      }
+      .arow .an {
+        flex: 1;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .arow .ab {
+        font-size: 13px;
+        color: var(--mute);
+        white-space: nowrap;
+      }
+      .arow .ab i {
+        font-style: normal;
+        font-size: 11px;
+        margin-inline-start: 3px;
+      }
+      .arow .ad {
+        color: var(--mute);
+        font-size: 18px;
+        line-height: 1;
+        padding-inline: 2px 6px;
+      }
+      /* ردیف رنگ کارت در مودال */
+      .swr {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .swr button {
+        width: 46px;
+        height: 34px;
+        border-radius: 10px;
+        border: 2px solid transparent;
+        cursor: pointer;
+        padding: 0;
+      }
+      .swr button.on {
+        border-color: var(--ink);
+        box-shadow: 0 0 0 2px var(--bg);
       }
       .btn,
       .plus,
@@ -783,33 +868,124 @@
         height: 100%;
         border-radius: 9px;
       }
+      /* کیف پول. scroll-snap-type اینجا عمداً نیست: snap یک containing
+         block می‌سازد و فضای سه‌بعدیِ کارت‌ها را می‌بندد، حتی وقتی
+         overflow را visible می‌گذاریم — کارت دیگر نمی‌چرخد. بنابراین
+         اسکرول افقی هست ولی snap نه؛ کشیدن با انگشت کار می‌کند و
+         جای‌نشینیِ نرم را wSnap در جاوااسکریپت انجام می‌دهد. */
       .wallet {
         display: flex;
         gap: 12px;
         overflow-x: auto;
-        scroll-snap-type: x mandatory;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
         margin: 0 -16px 12px;
         padding: 2px 16px 10px;
         scrollbar-width: none;
+        scroll-behavior: smooth;
       }
       .wallet::-webkit-scrollbar {
         display: none;
       }
+      /* توجه: هیچ transformی روی .wc نگذار. حتی translateZ(0) یک stacking
+         context می‌سازد و فرزندان را flatten می‌کند، یعنی چرخش کارت
+         از کار می‌افتد در حالی که کلاس on روی عنصر هست. */
       .wc {
         flex: none;
         width: min(84%, 330px);
         aspect-ratio: 1.586;
         border-radius: 24px;
-        padding: 18px 20px;
         color: #fff;
         position: relative;
-        overflow: hidden;
         scroll-snap-align: center;
+        display: block;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+        /* چشم روی خودِ کارت: کارت هرکدام فضای سه‌بعدیِ مستقل خودش را
+           دارد و اسکرولِ نوار دیگر چیزی را خراب نمی‌کند. */
+        perspective: 1200px;
+        /* overflow اینجا عمداً نیست. overflow:hidden فضای سه‌بعدی را
+           می‌بندد و rotateY را بی‌اثر می‌کند؛ گِردی گوشه‌ها را روی
+           خودِ رو و پشت کارت نگه می‌داریم. */
+      }
+      /* لایهٔ میانی که می‌چرخد. perspective را روی خودِ همین عنصر
+         می‌گذاریم نه روی والد: والد overflow:hidden دارد و در بعضی
+         موتورها آن ترکیب فضای سه‌بعدی را می‌بندد و چرخش را بی‌اثر
+         می‌کند. */
+      .wi {
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
-        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
+        transform-style: preserve-3d;
+        transition: transform 0.55s cubic-bezier(0.4, 0.1, 0.2, 1);
       }
-      .wc::before {
+      .wc.on .wi {
+        transform: rotateY(180deg);
+      }
+      /* رو و پشت کارت */
+      .wff,
+      .wfb {
+        position: absolute;
+        inset: 0;
+        padding: 18px 20px;
+        display: flex;
+        flex-direction: column;
+        border-radius: 24px;
+        overflow: hidden;
+        backface-visibility: hidden;
+        -webkit-backface-visibility: hidden;
+      }
+      .wfb {
+        transform: rotateY(180deg);
+        justify-content: center;
+        gap: 14px;
+      }
+      /* محتوای پشت کارت: شمارهٔ کارت و مبلغ به حروف */
+      .wbi {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .wbi.g {
+        margin-top: 18px;
+      }
+      .bt {
+        font-size: 11px;
+        opacity: 0.75;
+        letter-spacing: 0.2px;
+      }
+      .bnr {
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        /* رقم‌های فارسی نباید حاشیهٔ کلمه داشته باشند */
+        word-spacing: 0;
+        font-feature-settings: 'ss01';
+      }
+      .bnr.sm {
+        font-size: 12.5px;
+        font-weight: 600;
+        line-height: 1.65;
+        /* متن بلند نباید از کارت بیرون بزند */
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .bnr.dim {
+        opacity: 0.55;
+        font-weight: 500;
+      }
+      /* پرسش: کارت در حالت چرخیده هم واکنش به فشردن بدهد */
+      .wc:active .wi {
+        transform: rotateY(0deg) scale(0.97);
+      }
+      .wc.on:active .wi {
+        transform: rotateY(180deg) scale(0.97);
+      }
+      /* دایره‌های تزیینی. چون .wc دیگر overflow ندارد (برای چرخش)، اینها
+         باید روی خودِ روِ کارت باشند تا از گِردی گوشه بیرون نزنند. */
+      .wff::before {
         content: '';
         position: absolute;
         width: 220px;
@@ -819,7 +995,7 @@
         left: -70px;
         top: -90px;
       }
-      .wc::after {
+      .wff::after {
         content: '';
         position: absolute;
         width: 160px;
@@ -829,7 +1005,12 @@
         right: -40px;
         bottom: -60px;
       }
-      .wc > * {
+      /* z-index لایه‌ها. .wi خودش relative است، پس قاعدهٔ عمومیِ
+         «فرزندِ کارت» نباید آن را دوباره position بدهد — وگرنه inset:0
+         بی‌اثر می‌ماند و لایه ارتفاع صفر می‌گیرد. */
+      .wc > *:not(.wi),
+      .wff > *,
+      .wfb > * {
         position: relative;
         z-index: 1;
       }
@@ -1097,3 +1278,4 @@
   background: none;
   border: 0;
 }
+
