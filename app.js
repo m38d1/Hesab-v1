@@ -1016,7 +1016,7 @@
             (sType === 'in') +
             '">درآمد</button><button data-st="tf" style="flex:.55;font-size:12px" aria-pressed="' +
             (sType === 'tf') +
-            '">انتقال</button></div><div class="fld"><label>مبلغ<input id="fa" class="amt" inputmode="numeric" placeholder="۰" value="' +
+            '">انتقال</button></div><div class="fld tx"><label class="full">مبلغ<input id="fa" class="amt" inputmode="numeric" placeholder="۰" value="' +
             (t.amount ? fi(t.amount) : '') +
             '"></label><label id="fcl">دسته<select id="fc"></select></label><label><span id="fal">حساب</span><select id="fk">' +
             AO(t.acc || 0)
@@ -1047,13 +1047,24 @@
               })
               .join('') +
             '</select></label><label>تاریخ<button type="button" id="fd" data-x="cal" style="color:var(--blue);font-weight:600;font-size:16px"></button></label>' +
-            (id
-              ? ''
-              : '<label>تکرار<select id="fr"><option value="0">بدون تکرار</option><option value="m">هر ماه</option><option value="w">هر هفته</option><option value="d">هر روز</option></select></label>') +
             personField(t) +
-            '<label>توضیح<input id="fn" placeholder="اختیاری" value="' +
+            '<label class="full">توضیح<input id="fn" placeholder="اختیاری" value="' +
             esc(t.note || '') +
-            '" style="direction:rtl;text-align:left"></label></div><button class="btn" data-x="save">ذخیره</button>' +
+            '" style="direction:rtl;text-align:left"></label></div>' +
+            /* تکرار و «شخص جدید» کم‌کاربردند و فرم را شلوغ می‌کنند. اگر مقداری
+               ندارند تا وقتی کاربر خودش باز نکند اصلاً دیده نمی‌شوند — و اگر
+               دارند باز می‌آیند، وگرنه کسی که «تکرار» را زده بود بعداً می‌فهمد
+               که تراکنش تکرار نشده. */
+            moreBox(
+              [
+                id
+                  ? ''
+                  : '<label>تکرار<select id="fr"><option value="0">بدون تکرار</option><option value="m">هر ماه</option><option value="w">هر هفته</option><option value="d">هر روز</option></select></label>',
+              ].join(''),
+              moreWanted(t),
+              'تکرار',
+            ) +
+            '<button class="btn" data-x="save">ذخیره</button>' +
             (id
               ? '<button class="btn g" data-x="dup">تکرار با تاریخ امروز</button><button class="btn d" data-x="del">حذف تراکنش</button>'
               : '');
@@ -1511,22 +1522,110 @@
               })
               .join('');
         }
-        function personField(t) {
-          var l = (t.p && S.ppl.indexOf(t.p) < 0 ? [t.p] : []).concat(S.ppl);
+        /* آیا جعبهٔ «بیشتر» باید باز باشد؟ اگر این تراکنش از قبل چیزی در آن
+           دارد، پنهانش نکن: کاربر باید همان را ببیند، نه اینکه فکر کند
+           ثبت نشده. بر اساس دادهٔ ذخیره‌شده — DOM هنوز ساخته نشده. */
+        function moreWanted(t) {
+          /* شخصی که با دست تایپ شده و در فهرست نیست، فقط اینجا ذخیره شده. */
+          return !!(t.p && S.ppl.indexOf(t.p) < 0);
+        }
+        /* جعبهٔ «بیشتر»: فیلدهای کم‌کاربرد تا خواسته نشوند جمع می‌مانند. */
+        function moreBox(html, open, label) {
           return (
-            '<label>شخص<select id="fp"><option value="">—</option>' +
-            l
-              .map(function (n) {
-                return '<option' + (t.p === n ? ' selected' : '') + '>' + esc(n) + '</option>';
-              })
-              .join('') +
-            '</select></label><label>شخص جدید<input id="fpn" placeholder="اختیاری" style="direction:rtl;text-align:left"></label>'
+            '<details class="more"' +
+            (open ? ' open' : '') +
+            '><summary>بیشتر' +
+            (label ? ' — ' + label : '') +
+            '</summary><div class="fld tx">' +
+            html +
+            '</div></details>'
           );
         }
+        /* یک کنترل، دو کار. قبلاً یک فهرست کشویی و یک کادر «شخص جدید» جدا
+           بود: همان اسم را دو جا می‌دیدی و نمی‌دانستی کدام پر است. حالا یک
+           ورودی است با فهرست پیشنهاد زیرش — یکی را انتخاب می‌کنی، یا
+           اسم تازه می‌نویسی و همان‌جا ثبت می‌شود. */
+        /* یک ورودی با پیشنهاد زنده. datalist بومی روی بیشتر مرورگرهای
+           موبایل اصلاً فیلتر نمی‌کند، پس خودمان می‌سازیم: با هر حرف،
+           فهرست پایین ورودی پر می‌شود. */
+        var pplHits = [],
+          pplAt = -1;
+        function personField(t) {
+          var l = (t.p && S.ppl.indexOf(t.p) < 0 ? [t.p] : []).concat(S.ppl);
+          pplList = l;
+          return (
+            '<label class="ppf">شخص<input id="fp" autocomplete="off" placeholder="اختیاری" value="' +
+            esc(t.p || '') +
+            '" style="direction:rtl;text-align:right" role="combobox" aria-expanded="false" aria-autocomplete="list"><span class="car" aria-hidden="true">▾</span></label>' +
+            '<div class="ppb" id="ppb" hidden></div>'
+          );
+        }
+        var pplList = [];
+        /* پیشنهاد با شروعِ همان چیزی که نوشته شده، و اگر چیزی با شروع پیدا
+           نشد، هر جای متن. «ع» باید «علی» و «رضا محمدی» را نشان بدهد، نه
+           اینکه فقط «ع»-ها را. */
+        function pplFilter(q) {
+          q = (q || '').trim();
+          if (!q) return pplList.slice(0, 8);
+          var lo = q.toLowerCase();
+          var starts = pplList.filter(function (n) {
+            return n.toLowerCase().indexOf(lo) === 0;
+          });
+          if (starts.length) return starts.slice(0, 8);
+          return pplList
+            .filter(function (n) {
+              return n.toLowerCase().indexOf(lo) > 0;
+            })
+            .slice(0, 8);
+        }
+        function pplShow() {
+          var f = $('fp');
+          var box = $('ppb');
+          if (!f || !box) return;
+          pplHits = pplFilter(f.value);
+          pplAt = -1;
+          if (!pplHits.length) {
+            box.hidden = true;
+            box.innerHTML = '';
+            f.setAttribute('aria-expanded', 'false');
+            return;
+          }
+          box.innerHTML = pplHits
+            .map(function (n, i) {
+              return '<button type="button" data-pp="' + i + '">' + esc(n) + '</button>';
+            })
+            .join('');
+          box.hidden = false;
+          f.setAttribute('aria-expanded', 'true');
+        }
+        function pplHide() {
+          var box = $('ppb');
+          var f = $('fp');
+          if (box) {
+            box.hidden = true;
+            box.innerHTML = '';
+          }
+          if (f) f.setAttribute('aria-expanded', 'false');
+          pplHits = [];
+          pplAt = -1;
+        }
+        function pplMove(d) {
+          if (!pplHits.length) return;
+          pplAt = (pplAt + d + pplHits.length) % pplHits.length;
+          var box = $('ppb');
+          Array.prototype.forEach.call(box.children, function (b, i) {
+            b.classList.toggle('on', i === pplAt);
+            if (i === pplAt) b.scrollIntoView({ block: 'nearest' });
+          });
+        }
         function personPick() {
-          var n = ($('fpn').value || '').replace(/[<>&"]/g, '').trim();
-          if (n && S.ppl.indexOf(n) < 0) S.ppl.push(n);
-          return n || $('fp').value || undefined;
+          var f = $('fp');
+          var n = ((f && f.value) || '').replace(/[<>&"]/g, '').trim();
+          if (!n) return undefined;
+          /* اسمی که در فهرست نبود، همین‌جا به فهرست اضافه می‌شود تا دفعهٔ
+             بعد پیشنهاد داده شود. */
+          if (S.ppl.indexOf(n) < 0) S.ppl.push(n);
+          return n;
         }
         function pplHtml() {
           return (
@@ -2913,7 +3012,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam],[data-acc],[data-cw]',
+            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam],[data-acc],[data-cw],[data-pp]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -2925,13 +3024,23 @@
             render();
             scrollTo(0, 0);
             aniApp();
-          /* d.m صفر هم معنی دارد («برگشت به امروز»)، پس باید با !== undefined
-             سنجیده شود نه با if معمولی که صفر را falsy می‌بیند. */
+          /* d.m صفر هم معنی دارد: «برگشت به امروز». و نباید به shift گره بخورد،
+             چون shift با صفر همان ماه فعلی را برمی‌گرداند، نه ماه امروز. */
           } else if (d.m !== undefined) {
-            var p = shift(cur.y, cur.m, +d.m || 0);
-            cur.y = p[0];
-            cur.m = p[1];
+            var n = +d.m;
+            if (n === 0) {
+              var tp = parts(today());
+              cur.y = tp.y;
+              cur.m = tp.m;
+              flt = 'all';
+              aflt = -1;
+            } else {
+              var p = shift(cur.y, cur.m, n);
+              cur.y = p[0];
+              cur.m = p[1];
+            }
             render();
+            scrollTo(0, 0);
           } else if (d.jump) {
             var jp = parts(d.jump);
             cur.y = jp.y;
@@ -2969,6 +3078,14 @@
             Array.prototype.forEach.call(document.querySelectorAll('#cw button'), function (b) {
               b.classList.toggle('on', b === el);
             });
+          } else if (d.pp !== undefined) {
+            /* یکی از پیشنهادها انتخاب شد */
+            var pick = pplHits[+d.pp];
+            if (pick) {
+              $('fp').value = pick;
+              pplHide();
+              $('fp').focus();
+            }
           } else if (d.eo) openEmoji(+d.eo);
           else if (d.ep) {
             var ep = d.ep.split('|');
@@ -3238,7 +3355,8 @@
             smsGo();
           } else if (d.x === 'smsave') {
             smsSave();
-          } else if (d.x === 'rst') {
+          } else if (d.x === 'syon') syKeySheet();
+          else if (d.x === 'rst') {
             if (el.dataset.s) {
               snapAct('همه داده‌ها حذف شد', function () {
                 S = { tx: [], bud: {}, theme: S.theme };
@@ -3273,6 +3391,10 @@
             if (!n) return;
             n.focus({ preventScroll: true });
             n.setSelectionRange(p, p);
+          } else if (t.id === 'fp') {
+            /* پیشنهاد زنده. نه وقتی که برنامه خودش مقدار می‌گذارد — وگرنه
+               فرم با پیشنهاد جلوی صورت کاربر باز می‌شد. */
+            if (!e.isComposing) pplShow();
           } else if (t.dataset.b) {
             var cap = P(t.value);
             t.value = cap ? fi(cap) : '';
@@ -3367,24 +3489,58 @@
           w.classList.toggle('on', !!flipped[i]);
         });
         document.addEventListener('keydown', function (e) {
+          /* کلیدهای فهرست پیشنهاد، فقط وقتی باز است و ورودی شخص فعال است. */
+          if (pplHits.length && $('fp') && document.activeElement === $('fp')) {
+            if (e.key === 'ArrowDown') {
+              pplMove(1);
+              e.preventDefault();
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              pplMove(-1);
+              e.preventDefault();
+              return;
+            }
+            if (e.key === 'Enter' && pplAt >= 0) {
+              $('fp').value = pplHits[pplAt];
+              pplHide();
+              e.preventDefault();
+              return;
+            }
+          }
           if (e.key === 'Escape') {
-            closeCal();
-            closeSheet();
+            /* اول فهرست را ببند، نه کل شیت را: بستن کل شیت وسط تایپ یک
+               اشتباه گران است. */
+            if (!$('ppb') || $('ppb').hidden) {
+              closeCal();
+              closeSheet();
+            } else {
+              pplHide();
+              e.preventDefault();
+            }
           }
         });
-    if ('serviceWorker' in navigator)
-      window.addEventListener('load', function () {
-        var reloading = false;
-        /* A waiting worker means a new build is on disk. The old page is still running the
-           old code, so ask instead of silently swapping underneath the user. */
-        function offer(reg) {
-          var w = reg && reg.waiting;
-          if (!w || !navigator.serviceWorker.controller) return;
-          toast('نسخه‌ی جدید برنامه آماده است', function () {
-            reloading = true;
-            w.postMessage({ type: 'SKIP_WAITING' });
-          }, 'به‌روزرسانی کن');
-        }
+    if ('serviceWorker' in navigator) {
+      var reloading = false,
+        offered = false;
+      /* A waiting worker means a new build is on disk. The old page is still running
+         the old code, so ask instead of silently swapping underneath the user. */
+      function offer(reg) {
+        var w = reg && reg.waiting;
+        /* controller check: on the very first visit there is nothing to update from,
+           and offering there would be a lie. */
+        if (!w || !navigator.serviceWorker.controller) return;
+        if (offered) return;
+        offered = true;
+        toast('نسخهٔ جدید برنامه آماده است', function () {
+          reloading = true;
+          w.postMessage({ type: 'SKIP_WAITING' });
+        }, 'به‌روزرسانی کن');
+      }
+      /* This ran on window 'load' before, which never fires if the page finished
+         loading first — and app.js is at the end of the body, so that was a live
+         bug: some visits registered no worker at all and got no updates ever. */
+      var swGo = function () {
         navigator.serviceWorker.addEventListener('controllerchange', function () {
           if (reloading) location.reload();
         });
@@ -3394,14 +3550,31 @@
             var w = reg.installing;
             if (!w) return;
             w.addEventListener('statechange', function () {
+              /* 'installed' also fires for an old worker's redundant install; the
+                 waiting check inside offer() is what filters that. */
               if (w.state === 'installed') offer(reg);
             });
           });
-          setInterval(function () {
+          /* Ask often, not once. A person opens this app most days, and a 30-minute
+             poll meant a deploy could sit unseen for hours. Cheap: the browser
+             serves the byte-identical sw.js from its own HTTP cache. */
+          var poke = function () {
             reg.update().catch(function () {});
-          }, 30 * 60 * 1000);
+          };
+          setInterval(poke, 5 * 60 * 1000);
+          document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+              poke();
+              offer(reg);
+            }
+          });
+          window.addEventListener('focus', poke);
+          window.addEventListener('online', poke);
         }).catch(function () {});
-      });
+      };
+      if (document.readyState === 'complete') swGo();
+      else window.addEventListener('load', swGo);
+    }
         load();
         runPending();
         render();

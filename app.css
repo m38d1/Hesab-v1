@@ -535,9 +535,10 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 11px 16px;
-        gap: 12px;
-        font-size: 15px;
+        padding: 9px 14px;
+        gap: 8px;
+        font-size: 14px;
+        min-width: 0;
       }
       .fld label + label {
         border-top: 0.5px solid var(--sep);
@@ -547,20 +548,222 @@
         border: 0;
         background: none;
         text-align: left;
-        font-size: 16px;
-        max-width: 60%;
+        font-size: 15px;
+        max-width: 58%;
         direction: ltr;
         outline-offset: 2px;
+        min-width: 0;
       }
       .fld select {
         direction: rtl;
         text-align: left;
       }
       .fld .amt {
-        font-size: 24px;
+        font-size: 20px;
         font-weight: 700;
         width: 100%;
-        max-width: 60%;
+        max-width: 58%;
+      }
+
+      /* پیشنهاد زندهٔ نام شخص. بدون این استایل، دکمه‌ها رنگ پیش‌فرض
+         مرورگر می‌گیرند — آبی — و انتخاب‌شده هم آبی‌تر می‌شود. */
+      .fld.tx label.ppf {
+        position: relative;
+      }
+      .fld.tx label.ppf .car {
+        position: absolute;
+        inset-inline-end: 10px;
+        bottom: 8px;
+        font-size: 10px;
+        color: var(--mute);
+        pointer-events: none;
+      }
+      .fld.tx input#fp {
+        padding-inline-end: 22px;
+      }
+      /* جعبه زیر ورودی. position:absolute است تا در شبکهٔ دو ستونه جایی
+         نگیرد و ارتفاع فرم را دوباره زیاد نکند. */
+      .ppb {
+        position: absolute;
+        inset-inline: 5px;
+        top: calc(100% - 2px);
+        z-index: 30;
+        background: var(--card);
+        border-radius: 11px;
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+        border: 0.5px solid var(--sep);
+        overflow: hidden;
+        max-height: 190px;
+        overflow-y: auto;
+      }
+      .ppb[hidden] {
+        display: none;
+      }
+      /* ردیف‌های پیشنهاد: بدون هیچ ظاهر دکمه‌ای */
+      .ppb button {
+        display: block;
+        width: 100%;
+        text-align: start;
+        border: 0;
+        background: none;
+        font: inherit;
+        font-size: 14px;
+        color: var(--ink);
+        padding: 10px 14px;
+        cursor: pointer;
+      }
+      .ppb button + button {
+        border-top: 0.5px solid var(--sep);
+      }
+      /* انتخاب با کیبورد و با لمس، هم‌رنگ بماند — نه آبی مرورگر */
+      .ppb button:hover,
+      .ppb button.on {
+        background: var(--fill);
+        color: var(--ink);
+      }
+      /* حلقهٔ فوکوس مرورگر پیش‌فرض آبی است و روی ردیف نرمال عجیب می‌نشیند.
+         اینجا به پس‌زمینهٔ ملایم تبدیل می‌شود. */
+      .ppb button:focus,
+      .ppb button:focus-visible {
+        outline: none;
+        background: var(--fill);
+      }
+      /* جعبهٔ «بیشتر»: یک عنوان قابل کلیک که دو فیلد کم‌کاربرد را باز می‌کند.
+         summary به‌صورت پیش‌فرض یک مثلث دارد که در RTL به‌هم می‌ریزد، پس
+         خودمان می‌سازیم. */
+      details.more {
+        margin: 0 0 12px;
+        border-radius: 14px;
+        background: var(--card);
+        overflow: hidden;
+      }
+      details.more > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 11px 16px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--mute);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      details.more > summary::-webkit-details-marker {
+        display: none;
+      }
+      details.more > summary::before {
+        content: '';
+        width: 7px;
+        height: 7px;
+        border-inline-end: 2px solid currentColor;
+        border-block-end: 2px solid currentColor;
+        transform: rotate(-45deg);
+        transition: transform 0.2s;
+        margin-inline-end: 2px;
+      }
+      details.more[open] > summary::before {
+        transform: rotate(45deg);
+      }
+      details.more[open] > summary {
+        color: var(--ink);
+        border-bottom: 0.5px solid var(--sep);
+      }
+      details.more > .fld {
+        margin: 8px;
+      }
+      /* هدف لمس درشت بماند */
+      details.more > summary {
+        min-height: 38px;
+        padding: 6px 16px;
+      }
+      /* فرم تراکنش: نُه فیلد در یک ستون یعنی ۴۱۱ پیکسل ارتفاع و اسکرول.
+         دو ستون، ارتفاع را تقریباً نصف می‌کند. مبلغ و تاریخ تمام‌عرض می‌مانند
+         چون مهم‌ترین‌اند و ورودی‌های بلند دارند؛ بقیه جفت می‌شوند.
+
+         هر فیلد یک کاشیِ جدا با پس‌زمینهٔ کارت و فاصلهٔ واقعی است، نه یک
+         خط ۰.۵ پیکسلی. آن خط عملاً دیده نمی‌شد و نمی‌شد فهمید کدام ورودی
+         مال کدام برچسب است. */
+      /* دکمهٔ چسباندن پیامک، در فرم تراکنش باریک‌تر می‌شود تا شیت جا شود.
+         در فرم‌های دیگر دست‌نخورده می‌ماند. */
+      .fld.tx ~ .btn.g {
+        padding: 9px 14px;
+        font-size: 14px;
+        margin-bottom: 0;
+      }
+      /* در فرم تراکنش، فاصله‌ها را می‌بندیم تا شیت یک‌جا جا شود. */
+      #sh .fld.tx {
+        margin-bottom: 8px;
+      }
+      #sh h3 {
+        margin-bottom: 8px;
+      }
+      #sh .grab {
+        margin-bottom: 4px;
+      }
+      .fld.tx {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+        background: var(--fill);
+        padding: 5px;
+        border-radius: 13px;
+        overflow: hidden;
+      }
+      .fld.tx label {
+        background: var(--card);
+        border-radius: 10px;
+        border-top: 0;
+        padding: 6px 11px;
+        align-items: baseline;
+      }
+      .fld.tx label.full {
+        grid-column: 1 / -1;
+      }
+      /* برچسب بالای ورودی می‌نشیند تا چشم اول برچسب را پیدا کند. */
+      .fld.tx label {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 2px;
+      }
+      .fld.tx label > span:first-child,
+      .fld.tx label:not(:has(span)) {
+        color: var(--mute);
+      }
+      .fld.tx input,
+      .fld.tx select,
+      .fld.tx .amt {
+        max-width: 100%;
+        width: 100%;
+        text-align: right;
+        direction: rtl;
+      }
+      /* تاریخ و ورودی‌های عددی چپ‌چین و چسبیده به لبه بمانند */
+      .fld.tx input[inputmode='numeric'],
+      .fld.tx .amt {
+        direction: ltr;
+        text-align: left;
+        font-variant-numeric: tabular-nums;
+      }
+      .fld.tx .dt {
+        max-width: 100%;
+      }
+      .fld.tx .dt button {
+        font-size: 15px;
+      }
+      /* در یک صفحهٔ باریک، یک ستون امن‌تر است: ورودی‌ها له می‌شوند. */
+      @media (max-width: 360px) {
+        .fld.tx {
+          grid-template-columns: 1fr;
+        }
+      }
+      /* لمس: هر کاشی یک هدف ۴۴ پیکسلی می‌ماند. */
+      @media (max-width: 360px) {
+        .fld.tx label {
+          min-height: 44px;
+          justify-content: center;
+        }
       }
       .dt {
         display: flex;
