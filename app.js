@@ -2485,23 +2485,31 @@
         }
 
         function walletDown(e) {
+          if (e.pointerType === 'mouse' && e.button !== 0) return;
           var t = e.target && e.target.closest ? e.target.closest('.wallet, .wrail') : null;
           if (t && t.classList.contains('wrail')) t = t.querySelector('.wallet');
           var w = t;
           if (!w || !w.dataset.step) return;
-          var p = e.touches ? e.touches[0] : e;
-          wDrag = { x: p.clientX, y: p.clientY, w: w };
+          wDrag = { x: e.clientX, y: e.clientY, w: w, id: e.pointerId };
         }
 
         function walletUp(e) {
           if (!wDrag) return;
-          var p = e.changedTouches ? e.changedTouches[0] : e;
-          var dx = p.clientX - wDrag.x,
-            dy = p.clientY - wDrag.y;
+          if (e.pointerId != null && wDrag.id != null && e.pointerId !== wDrag.id) return;
+          var dx = e.clientX - wDrag.x,
+            dy = e.clientY - wDrag.y;
           var w = wDrag.w;
           wDrag = null;
+          /* کشیدن افقی معنی دارد؛ کشیدن عمودی اسکرول صفحه است و باید
+             دست‌نخورده به همان بماند. */
           if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
           walletStep1(w, dx < 0 ? 1 : -1);
+        }
+
+        /* اگر مرورگر کشیدن را وسط کار پس گرفت، کشیدنِ نیمه‌کاره نباید
+           کارت را تکان بدهد — فقط دادهٔ کشیدن پاک می‌شود. */
+        function walletCancel() {
+          wDrag = null;
         }
         function walletHtml(total, inc, exp) {
           var G = [
@@ -2514,8 +2522,11 @@
             ],
             u = S.unit === 'R' ? 'ریال' : 'تومان',
             ct = '<svg viewBox="0 0 24 24"><path d="M8.5 8.5a5 5 0 0 1 0 7M12 6a8.5 8.5 0 0 1 0 12M15.5 3.5a12 12 0 0 1 0 17"/></svg>';
-          function cd(g, t, v, l, r, b) {
-            /* b = شمارهٔ کارت، که پایین همان کارت می‌نشیند. */
+          function cd(g, t, v, l, r, b, ai) {
+            /* b = شمارهٔ کارت، که پایین همان کارت می‌نشیند.
+               ai = شمارهٔ حساب، تا لمس کارت مودال ویرایش همان حساب را
+               باز کند. بدون آن، لمس کارت هیچ کاری نمی‌کرد چون هیچ
+               نشانه‌ای برای اینکه کدام حساب است روی کارت نبود. */
             var f =
               '<div class="wff"><div class="wt"><span>' +
               t +
@@ -2536,7 +2547,9 @@
             return (
               '<div class="wc' +
               (b ? ' acct' : '') +
-              '" style="background:' +
+              '"' +
+              (ai != null ? ' data-acc="' + ai + '"' : '') +
+              ' style="background:' +
               g +
               '"><div class="wi">' +
               f +
@@ -2592,6 +2605,7 @@
               'موجودی حساب',
               '<span style="font-size:20px">' + esc(S.aem[i] || AIC[i] || '👛') + '</span>',
               cardBack(i, bal),
+              i,
             );
           });
           if (S.assets.length) h += cd(G[4], 'دارایی غیرنقدی', assetsTotal(), 'قیمت دستی', '<span style="font-size:20px">💎</span>');
@@ -3586,10 +3600,13 @@
         };
         /* جابه‌جایی کارت‌ها با انگشت یا چرخ ماوس. روی سند گوش می‌دهد چون
            نوار کیف پول با هر render از نو ساخته می‌شود. */
-        document.addEventListener('touchstart', walletDown, { passive: true });
-        document.addEventListener('touchend', walletUp, { passive: true });
+        /* فقط pointer event. لمس هم pointer می‌فرستد، و گوش دادن به
+           touch و pointer با هم یک کشیدن را دوبار حساب می‌کرد. pointercancel
+           هم لازم است: اگر مرورگر کشیدن افقی را به اسکرول بدزدد، pointerup
+           هرگز نمی‌آید و کارت همان‌جا می‌ماند. */
         document.addEventListener('pointerdown', walletDown, { passive: true });
         document.addEventListener('pointerup', walletUp, { passive: true });
+        document.addEventListener('pointercancel', walletCancel, { passive: true });
         document.addEventListener(
           'wheel',
           function (e) {
