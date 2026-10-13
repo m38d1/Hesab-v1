@@ -975,9 +975,8 @@
           norm();
           var h = { home: home, tx: txs, bud: bud, set: set }[tab]();
           $('app').innerHTML = h;
-          /* کیف پول تازه ساخته شده و حالا در صفحه است. setTimeout آن را از
-             همین رندر جدا می‌کند تا بعد از پایان رندر اجرا شود، و دو فریم
-             صبر می‌کند تا عرض کارت‌ها معلوم شود. */
+          /* کیف پول تازه در صفحه نشسته؛ اندازه‌اش را می‌خوانیم و نوار را
+             آمادهٔ جابه‌جایی می‌کنیم. */
           if (tab === 'home') walletArm();
           $('bar').innerHTML = TABS.map(function (t) {
             return (
@@ -2392,141 +2391,77 @@
           render();
         }
         /* ---------- کیف پول ----------
-           کارت‌ها به‌جای اسکرول، با translate جابه‌جا می‌شوند. دلیلش این است
-           که هر overflow روی نوار یک clipping context می‌سازد و هر transform
-           روی خودِ نوار فضای بچینش را خراب می‌کند. یک لایهٔ بیرونی
-           (.wrail) فقط ترجمه می‌کند و هیچ فرزندِ چیدمان‌داری ندارد.
+           کارت‌ها با translate جابه‌جا می‌شوند، نه با اسکرول. نوار داخل یک
+           ریلِ تمام‌عرض است که فقط برش می‌دهد؛ خودِ نوار ترجمه می‌شود و
+           کارت‌های همسایه از دو طرف صفحه بیرون می‌مانند تا «نگاه کردن» به
+           کارت بعدی ممکن باشد.
 
-           حلقه بی‌پایان با کپی کردن دو کارت از هر سر ساخته می‌شود. هر بار که
-           کاربر از آخرین کارت رد شد، بی‌صدا به اول برمی‌گردد و برعکس. */
-        var LOOP_N = 2,
-          wIdx = 0,
+           حلقه بی‌پایان ندارد. به اول و آخر که می‌رسیم، نوار همان‌جا می‌ایستد
+           و کارتی تکرار نمی‌شود. */
+        var wIdx = 0,
           wDrag = null;
-        /* فاصلهٔ دو کارت = عرضشان + فاصله. از مختصات دو کارتِ مجاور
-           نمی‌شود خواند چون کپی‌ها روی هم می‌افتند و اختلاف صفر می‌شود. */
+
+        /* فاصلهٔ دو کارت = عرضشان + گپ. */
         function walletStep(w) {
-          var _cards = Array.prototype.filter.call(w.children, function (x) {
-            return x.classList && x.classList.contains('wc');
-          });
-          var c = _cards[0];
+          var c = w.querySelector('.wc');
           if (!c) return 0;
           var gap = parseFloat(getComputedStyle(w).gap) || 0;
           return c.getBoundingClientRect().width + gap;
         }
-        /* یک پوشش که بعد از دو فریم واقعاً کار می‌کند، برای وقتی که
-           walletLoop خیلی زود — قبل از اینکه نوار در صفحه بنشیند — صدا
-           زده شود. */
-        var loopArmed = 0;
+
+        /* نوار با هر render از نو ساخته می‌شود، پس اندازه‌ها باید بعد از آن
+           خوانده شوند. دو تایمر پشت‌سرهم یک چرخهٔ چیدمان کامل را صبر
+           می‌کند؛ اگر walletArm دوباره صدا زده شود، این تلاش بی‌اثر می‌ماند. */
+        var walletReady = 0;
         function walletArm() {
-          var n = ++loopArmed;
+          var n = ++walletReady;
           setTimeout(function () {
             setTimeout(function () {
-              if (n === loopArmed) {
-                try {
-                  walletLoop();
-                } catch (e) {
-                  if (window.console) console.error('walletLoop:', e);
-                }
+              if (n !== walletReady) return;
+              try {
+                walletBuild();
+              } catch (e) {
+                if (window.console) console.error('walletBuild:', e);
               }
             });
           });
         }
-                function walletLoop() {
+
+        function walletBuild() {
           var w = document.querySelector('.wallet');
           if (!w) {
             walletArm();
             return;
           }
-          if (!w.querySelector('.wc')) {
+          var cards = Array.prototype.filter.call(w.children, function (c) {
+            return c.classList && c.classList.contains('wc');
+          });
+          if (!cards.length) {
             walletArm();
             return;
           }
-          if (w.dataset.looped) return;
-          w.dataset.looped = 'building';
-          /* پاکسازی clonesِ پیشین (اگر اجرای قبلی نیمه جا مانده بود). آن‌ها
-             الگوریتم step/k را گیج می‌کنند و تا وقتی نباشند، کارتٔ واقعی
-             نفرِ اول وسط نمی‌نشیند. */
-          Array.prototype.slice.call(w.children).forEach(function (c) {
-            if (c.dataset && c.dataset.clone === '1') c.remove();
-          });
-
-          var cards = function (cloned) {
-            return Array.prototype.filter.call(w.children, function (c) {
-              return !!(c.classList && c.classList.contains('wc')) && (cloned ? (c.dataset && c.dataset.clone === '1') : true);
-            });
-          };
-          var real = cards();
-          if (real.length < 3) return;
-          /* بدون cloneها، real همان چهار کارت است — k از real.length
-             کجصل می‌شود. */
-          real = real.filter(function (c) {
-            return c.dataset.clone !== '1';
-          });
-          /* اگر قبلاً کپی شده، فقط دوباره جای‌نشینی کن */
-          if (!Array.prototype.some.call(w.children, function (c){ return c.dataset && c.dataset.clone === '1'; })) {
-            var k = Math.min(LOOP_N, real.length - 1),
-              i;
-            /* کپی‌های اول، به ترتیب، قبل از همه: در چیدمان راست‌به‌چپ،
-               «اول» یعنی انتهای چپ نوار. با fragment و insertBefore یک‌جا
-               درج می‌کنیم تا هر کدام سرِ جای خودشان بنشینند. */
-            var head = document.createDocumentFragment();
-              for (i = real.length - k; i < real.length; i++) {
-              var cl = real[i].cloneNode(true);
-              head.appendChild(cl);
-            }
-            w.insertBefore(head, w.firstChild);
-            /* کپی‌های آخر، بعد از همه */
-            var tail = document.createDocumentFragment();
-            for (i = 0; i < k; i++) {
-              var cl2 = real[i].cloneNode(true);
-              tail.appendChild(cl2);
-            }
-            w.appendChild(tail);
-            var marked = 0;
-            cards().forEach(function (c) {
-              if (real.indexOf(c) < 0) {
-                c.dataset.clone = '1';
-                marked++;
-              }
-            });
-            w.dataset.looped = '1';
-          }
           var step = walletStep(w);
           if (!step) return;
-          /* مرکزسازی قابل اعتماد: padding را خودمان حساب می کنیم تا
-             min(...) در calc CSS کل的를 خراب نکند. */
-          /* تعداد کپی هر سر از شمارش خودِ کپی‌ها، نه از تقسیم بر دو که
-             وقتی روی هم می‌افتند قابل‌اعتماد نیست. */
-          var k = Array.prototype.filter.call(real, function(){return false;}).length || (+w.dataset.k) ;
-          /* کپی های دوشنبه دوشان 4 تا بودند: clones خودِ run جدید */
-          var _clonesNow = Array.prototype.filter.call(w.children, function(c){ return c.dataset && c.dataset.clone === '1';}).length;
-          if (_clonesNow > 0) k = _clonesNow / 2;
-          else if (isNaN(k) || k <= 0) k = 2;
-          w.dataset.k = String(k);
-          w.dataset.n = String(real.length);
+          /* پدینگِ دو طرف را از عرض واقعی کارت می‌سازیم تا کارت اول روی
+             هر صفحه‌ای — از گوشی باریک تا دسکتاپ پهن — دقیقاً وسط بنشیند.
+             calcِ CSS با min() روی عرض ۳۰۰ ثابت درست حساب نمی‌کرد. */
+          var lead = Math.round((w.clientWidth - cards[0].getBoundingClientRect().width) / 2);
+          if (lead < 0) lead = 0;
+          w.style.paddingLeft = lead + 'px';
+          w.style.paddingRight = lead + 'px';
+          w.dataset.n = String(cards.length);
           w.dataset.step = String(step);
-          /* إندازهٔ واقعی مسافت بینهای ستون کارت صفرم را روی صفحه
-             میخوانیم و ظرف را دقیقا آنجایی که باید ببریم. */
-          /* پدینگ CSS نیمهٔ فضای خالی را از قبل داده، پس کافی است کپی‌های
-             ابتدایی را به اندازهٔ k کارت از جلو رد کنیم تا کارت واقعیِ صفرم
-             وسط بنشیند. */
-          var t0 = -k * step;
-          w.dataset.t0 = String(t0);
-          /* چون render هر بار نوار را تازه می‌سازد، همیشه از صفر شروع می‌کنیم */
           wIdx = 0;
           walletPlace(w, 0);
         }
-        /* walletPlace کارت واقعیِ شمارهٔ idx را وسط می‌آورد. کارت‌های کپی
-           k تا قبل و بعد از آن می‌نشینند، ولی ما فقط کارت واقعی را حساب
-           می‌کنیم چون پدینگ نوار جای کپی‌ها را از قبل باز کرده. */
-        /* walletPlace کارتِ idx را وسط می آورد. بر پایة t0 محاسبه شده
-           مبتنی بر اندازه های واقعی، بر خلاف فرمول ثابت قبلی که سرِ
-           پدینگ خراب با min() بود. */
+
+        /* کارتِ idx را وسط می‌آورد و سرِ فهرست را نگه می‌دارد. */
         function walletPlace(w, idx) {
           var step = parseFloat(w.dataset.step) || 0;
           if (!step) return;
-          var t0 = +(w.dataset.t0 || 0);
-          if (!t0) t0 = +(w.dataset.lead || 0);
+          var n = +w.dataset.n || 1;
+          if (idx < 0) idx = 0;
+          if (idx > n - 1) idx = n - 1;
           wIdx = idx;
           w.dataset.idx = String(idx);
           /* جابه‌جایی روی خودِ نوار است، نه روی ریل: ریل قابِ برشِ ثابتِ
@@ -2539,16 +2474,16 @@
               w.style.transition = '';
             });
           }
-          w.style.transform = 'translateX(' + Math.round(t0 - idx * step) + 'px)';
+          /* نوار راست‌به‌چپ است، پس کارتِ بعدی یک «step» سمت چپ‌تر می‌نشیند
+             و برای آوردنش به وسط باید نوار به راست برود. */
+          w.style.transform = 'translateX(' + Math.round(idx * step) + 'px)';
         }
+
         function walletStep1(w, dir) {
           if (!w.dataset.step) return;
-          var n = +w.dataset.n,
-            i = wIdx + dir;
-          if (i >= n) i -= n;
-          if (i < 0) i += n;
-          walletPlace(w, i);
+          walletPlace(w, wIdx + dir);
         }
+
         function walletDown(e) {
           var t = e.target && e.target.closest ? e.target.closest('.wallet, .wrail') : null;
           if (t && t.classList.contains('wrail')) t = t.querySelector('.wallet');
@@ -2557,6 +2492,7 @@
           var p = e.touches ? e.touches[0] : e;
           wDrag = { x: p.clientX, y: p.clientY, w: w };
         }
+
         function walletUp(e) {
           if (!wDrag) return;
           var p = e.changedTouches ? e.changedTouches[0] : e;
