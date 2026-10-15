@@ -705,9 +705,11 @@
               '</div></div></div>';
           }
           if (S.loans.length) h += loansHtml();
+          /* Only real categories: a key left behind by an older build or a
+             hand-edited backup used to render as a nameless row here. */
           var bk = Object.keys(S.bud)
             .filter(function (k) {
-              return S.bud[k] > 0;
+              return S.bud[k] > 0 && CATS.out.indexOf(k) >= 0;
             })
             .sort(function (a, b) {
               return (by[b] || 0) / S.bud[b] - (by[a] || 0) / S.bud[a];
@@ -829,27 +831,33 @@
             '<div class="list"><div class="t">سقف ماهانه هر دسته (' +
             (S.unit === 'R' ? 'ریال' : 'تومان') +
             ')</div>' +
-            CATS.out
-              .map(function (k) {
-                var l = S.bud[k] || 0;
-                return (
-                  '<div class="bud"><div class="top"><div class="ic" style="background:' +
-                  STY[k][1] +
-                  '22">' +
-                  STY[k][0] +
-                  '</div><b style="flex:1;font-weight:500">' +
-                  k +
-                  '</b><input data-b="' +
-                  k +
-                  '" inputmode="numeric" placeholder="بدون سقف" value="' +
-                  (l ? fi(l) : '') +
-                  '"></div>' +
-                  (l ? '<div style="margin-top:2px">' + bRow(by, k).replace('class="bud"', 'style="padding:6px 0 0"') + '</div>' : '') +
-                  '</div>'
-                );
-              })
-              .join('') +
+            CATS.out.map(budRow.bind(null, by)).join('') +
             '</div>'
+          );
+        }
+        /* یک خط: ایموجی، نام، نوار پیشرفت، درصد و خودِ سقف. دستهٔ بدون سقف
+           هم نوار می‌گیرد تا ورودی‌ها در یک ستون راستا بمانند. */
+        function budRow(by, k) {
+          var l = S.bud[k] || 0,
+            u = by[k] || 0,
+            pr = l ? u / l : 0,
+            col = pr > 1 ? 'var(--red)' : pr > 0.8 ? 'var(--org)' : 'var(--blue)';
+          return (
+            '<div class="bud brow"><span class="ic" style="background:' +
+            STY[k][1] +
+            '22">' +
+            STY[k][0] +
+            '</span><b class="nm">' +
+            k +
+            '</b><span class="bar">' +
+            (l ? '<i style="width:' + Math.min(pr, 1) * 100 + '%;background:' + col + '"></i>' : '') +
+            '</span>' +
+            (l ? '<em class="pc" style="color:' + col + '">' + fr0(Math.round(pr * 100)) + '٪</em>' : '') +
+            '<input data-b="' +
+            k +
+            '" inputmode="numeric" placeholder="بدون سقف" value="' +
+            (l ? fi(l) : '') +
+            '"></div>'
           );
         }
         /* Storage durability: how much room is left, whether the browser will protect the data,
@@ -1555,11 +1563,14 @@
         function personField(t) {
           var l = (t.p && S.ppl.indexOf(t.p) < 0 ? [t.p] : []).concat(S.ppl);
           pplList = l;
+          /* پوشاننده لازم است: کادر پیشنهاد باید همسایه‌ی برچسب باشد تا
+             بتواند به خودِ فیلد بچسبد. پیش از این برچسب و کادر دو برادر
+             بودند، پس کادر به شیت می‌چسبید و وسط فرم باز می‌شد. */
           return (
-            '<label class="ppf">شخص<input id="fp" autocomplete="off" placeholder="اختیاری" value="' +
+            '<div class="ppw"><label class="ppf">شخص<input id="fp" autocomplete="off" placeholder="اختیاری" value="' +
             esc(t.p || '') +
             '" style="direction:rtl;text-align:right" role="combobox" aria-expanded="false" aria-autocomplete="list"><span class="car" aria-hidden="true">▾</span></label>' +
-            '<div class="ppb" id="ppb" hidden></div>'
+            '<div class="ppb" id="ppb" hidden></div></div>'
           );
         }
         var pplList = [];
@@ -1599,6 +1610,15 @@
             .join('');
           box.hidden = false;
           f.setAttribute('aria-expanded', 'true');
+          pplCap(box, f);
+        }
+        /* فهرست بلند نباید از بالای شیت بیرون بزند؛ قدش به فضای واقعیِ
+           بالای فیلد محدود می‌شود و خودش اسکرول می‌خورد. */
+        function pplCap(box, f) {
+          var sh = $('sh');
+          if (!sh) return;
+          var room = f.getBoundingClientRect().top - sh.getBoundingClientRect().top - 8;
+          box.style.maxHeight = Math.max(64, Math.min(190, room)) + 'px';
         }
         function pplHide() {
           var box = $('ppb');
@@ -1606,6 +1626,7 @@
           if (box) {
             box.hidden = true;
             box.innerHTML = '';
+            box.style.maxHeight = '';
           }
           if (f) f.setAttribute('aria-expanded', 'false');
           pplHits = [];

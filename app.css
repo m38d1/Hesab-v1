@@ -365,6 +365,49 @@
         padding: 6px 10px;
         font-size: 14px;
       }
+      /* ردیف سقف بودجه: ایموجی، نام، نوار پیشرفت و خودِ سقف، همه در یک خط.
+         نوار قبلاً زیرِ ردیف می‌نشست و از لبه تا لبه می‌کشید، پس به اسم
+         دسته چسبیده نبود. */
+      .bud.brow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 11px 16px;
+      }
+      .brow .ic {
+        flex: none;
+      }
+      .brow .nm {
+        flex: none;
+        font-weight: 500;
+        font-size: 14px;
+        white-space: nowrap;
+      }
+      .brow .bar {
+        flex: 1 1 auto;
+        min-width: 48px;
+        height: 7px;
+        border-radius: 9px;
+        background: var(--fill);
+        overflow: hidden;
+      }
+      .brow .bar i {
+        display: block;
+        height: 100%;
+        transition: width 0.4s;
+      }
+      .brow .pc {
+        flex: none;
+        min-width: 40px;
+        text-align: left;
+        font-size: 12.5px;
+        font-weight: 700;
+        font-style: normal;
+        font-variant-numeric: tabular-nums;
+      }
+      .brow input {
+        flex: none;
+      }
       .search {
         width: 100%;
         border: 0;
@@ -567,7 +610,8 @@
 
       /* پیشنهاد زندهٔ نام شخص. بدون این استایل، دکمه‌ها رنگ پیش‌فرض
          مرورگر می‌گیرند — آبی — و انتخاب‌شده هم آبی‌تر می‌شود. */
-      .fld.tx label.ppf {
+      /* پوشانندهٔ فیلد شخص: کادر پیشنهاد داخل آن می‌نشیند تا به فیلد بچسبد. */
+      .ppw {
         position: relative;
       }
       .fld.tx label.ppf .car {
@@ -586,14 +630,18 @@
       .ppb {
         position: absolute;
         inset-inline: 5px;
-        top: calc(100% - 2px);
+        /* همیشه بالای فیلد شخص. فیلد پایینِ فرم است و فهرستِ زیرش از لبهٔ
+           شیت بیرون می‌زد و روی صفحهٔ زیرین می‌افتاد. */
+        top: auto;
+        bottom: calc(100% - 2px);
         z-index: 30;
+        /* سقف واقعی را جاوااسکریپت از فضای بالای فیلد می‌نویسد. */
+        max-height: 190px;
         background: var(--card);
         border-radius: 11px;
         box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
         border: 0.5px solid var(--sep);
         overflow: hidden;
-        max-height: 190px;
         overflow-y: auto;
       }
       .ppb[hidden] {
