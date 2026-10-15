@@ -89,6 +89,17 @@
         outline: 2px solid var(--blue);
         outline-offset: 2px;
       }
+      /* سافاری برای فیلدهای متنی، حتی با لمس، کادر آبی نشان می‌دهد. در
+         فرم‌های ورود اطلاعات این کادر را نمی‌خواهیم؛ جای فیلدِ فعال را
+         مکان‌نما و کیبورد نشان می‌دهند. برای دکمه‌ها نشانهٔ کیبورد می‌ماند. */
+      input:focus,
+      input:focus-visible,
+      select:focus,
+      select:focus-visible,
+      textarea:focus,
+      textarea:focus-visible {
+        outline: none;
+      }
       .head {
         display: flex;
         align-items: flex-end;
@@ -613,6 +624,8 @@
       /* پوشانندهٔ فیلد شخص: کادر پیشنهاد داخل آن می‌نشیند تا به فیلد بچسبد. */
       .ppw {
         position: relative;
+        /* فهرست باید روی سطرهای دیگرِ همین شبکه (مبلغ، دسته، حساب) بیفتد. */
+        z-index: 40;
       }
       .fld.tx label.ppf .car {
         position: absolute;
@@ -759,6 +772,12 @@
         padding: 5px;
         border-radius: 13px;
         overflow: hidden;
+      }
+      /* کادر پیشنهاد اسم بالای این شبکه باز می‌شود. بدون این استثنا،
+         `overflow:hidden` والد، سرِ فهرست را می‌بُرد و سطر اول نصفه
+         می‌ماند — همان چیزی که کاربر دید. */
+      .fld.tx.ppopen {
+        overflow: visible;
       }
       .fld.tx label {
         background: var(--card);

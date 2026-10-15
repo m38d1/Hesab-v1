@@ -1610,6 +1610,10 @@
             .join('');
           box.hidden = false;
           f.setAttribute('aria-expanded', 'true');
+          /* شبکهٔ والد `overflow:hidden` دارد و سرِ فهرست را می‌بُرید. تا
+             وقتی فهرست باز است، برش را کنار می‌گذاریم. */
+          var grp = f.closest ? f.closest('.fld.tx') : null;
+          if (grp) grp.classList.add('ppopen');
           pplCap(box, f);
         }
         /* قد فهرست از روی خودِ سطرها حساب می‌شود: پنج تا کامل جا می‌شوند و
@@ -1632,6 +1636,8 @@
             box.hidden = true;
             box.innerHTML = '';
             box.style.maxHeight = '';
+            var grp = box.closest ? box.closest('.fld.tx') : null;
+            if (grp) grp.classList.remove('ppopen');
           }
           if (f) f.setAttribute('aria-expanded', 'false');
           pplHits = [];
