@@ -2442,7 +2442,7 @@
           void a.offsetWidth;
           a.classList.add('ani');
         }
-        function toast(msg, undo, label) {
+        function toast(msg, undo, label, sticky) {
           var el = document.getElementById('toast');
           if (!el) {
             el = document.createElement('div');
@@ -2460,6 +2460,10 @@
               el.classList.remove('on');
             };
           }
+          /* An update prompt must stay put: the person may be walking away from
+             the phone, and a toast that quietly expires means the new build sits
+             in "waiting" forever. Everything else keeps its usual timeout. */
+          if (sticky) return;
           tmr = setTimeout(function () {
             el.classList.remove('on');
           }, undo && label === 'برگردان' ? 5000 : 15000);
@@ -3442,60 +3446,85 @@
         });
         aniApp();
         if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
-      })();
-
-    if ('serviceWorker' in navigator) {
-      var reloading = false,
-        offered = false;
-      /* A waiting worker means a new build is on disk. The old page is still running
-         the old code, so ask instead of silently swapping underneath the user. */
-      function offer(reg) {
-        var w = reg && reg.waiting;
-        /* controller check: on the very first visit there is nothing to update from,
-           and offering there would be a lie. */
-        if (!w || !navigator.serviceWorker.controller) return;
-        if (offered) return;
-        offered = true;
-        toast('نسخهٔ جدید برنامه آماده است', function () {
-          reloading = true;
-          w.postMessage({ type: 'SKIP_WAITING' });
-        }, 'به‌روزرسانی کن');
-      }
-      /* This ran on window 'load' before, which never fires if the page finished
-         loading first — and app.js is at the end of the body, so that was a live
-         bug: some visits registered no worker at all and got no updates ever. */
-      var swGo = function () {
-        navigator.serviceWorker.addEventListener('controllerchange', function () {
-          if (reloading) location.reload();
-        });
-        navigator.serviceWorker.register('sw.js').then(function (reg) {
-          offer(reg);
-          reg.addEventListener('updatefound', function () {
-            var w = reg.installing;
-            if (!w) return;
-            w.addEventListener('statechange', function () {
-              /* 'installed' also fires for an old worker's redundant install; the
-                 waiting check inside offer() is what filters that. */
-              if (w.state === 'installed') offer(reg);
-            });
-          });
-          /* Ask often, not once. A person opens this app most days, and a 30-minute
-             poll meant a deploy could sit unseen for hours. Cheap: the browser
-             serves the byte-identical sw.js from its own HTTP cache. */
-          var poke = function () {
-            reg.update().catch(function () {});
-          };
-          setInterval(poke, 5 * 60 * 1000);
-          document.addEventListener('visibilitychange', function () {
-            if (!document.hidden) {
-              poke();
-              offer(reg);
+            if ('serviceWorker' in navigator) {
+        var reloading = false,
+          offered = false;
+        /* A waiting worker means a new build is on disk. The old page is still running
+           the old code, so ask instead of silently swapping underneath the user. */
+        function offer(reg) {
+          var w = reg && reg.waiting;
+          /* controller check: on the very first visit there is nothing to update from,
+             and offering there would be a lie. */
+          if (!w || !navigator.serviceWorker.controller) return;
+          if (offered) return;
+          offered = true;
+          try {
+            if (!localStorage.getItem('hesab-update-since')) localStorage.setItem('hesab-update-since', String(Date.now()));
+          } catch (e) {}
+          toast('نسخهٔ جدید برنامه آماده است', function () {
+            reloading = true;
+            w.postMessage({ type: 'SKIP_WAITING' });
+          }, 'به‌روزرسانی کن', true);
+        }
+        /* The prompt is deliberately never forced: a person mid-transaction should
+           not lose the sheet under them. But a prompt nobody answered must not leave
+           the app on a stale build forever either. After a week unanswered, the next
+           visit applies the update on its own. */
+        var STALE = 7 * 86400000;
+        function applyIfStale(reg) {
+          try {
+            var pend = localStorage.getItem('hesab-update-since');
+            if (reg.waiting && pend && Date.now() - +pend > STALE) {
+              reloading = true;
+              reg.waiting.postMessage({ type: 'SKIP_WAITING' });
             }
+          } catch (e) {}
+        }
+        /* This ran on window 'load' before, which never fires if the page finished
+           loading first — and app.js is at the end of the body, so that was a live
+           bug: some visits registered no worker at all and got no updates ever. */
+        var swGo = function () {
+          navigator.serviceWorker.addEventListener('controllerchange', function () {
+            try {
+              localStorage.removeItem('hesab-update-since');
+            } catch (e) {}
+            if (reloading) location.reload();
           });
-          window.addEventListener('focus', poke);
-          window.addEventListener('online', poke);
-        }).catch(function () {});
-      };
-      if (document.readyState === 'complete') swGo();
-      else window.addEventListener('load', swGo);
-    }
+          navigator.serviceWorker.register('sw.js').then(function (reg) {
+            /* A worker already waiting when we arrive is the common case: the person
+               opened the app after a deploy and never tapped the prompt. */
+            applyIfStale(reg);
+            offer(reg);
+            reg.addEventListener('updatefound', function () {
+              var w = reg.installing;
+              if (!w) return;
+              w.addEventListener('statechange', function () {
+                /* 'installed' also fires for an old worker's redundant install; the
+                   waiting check inside offer() is what filters that. */
+                if (w.state !== 'installed') return;
+                applyIfStale(reg);
+                offer(reg);
+              });
+            });
+            /* Ask often, not once. A person opens this app most days, and a 30-minute
+               poll meant a deploy could sit unseen for hours. Cheap: the browser
+               serves the byte-identical sw.js from its own HTTP cache. */
+            var poke = function () {
+              reg.update().catch(function () {});
+            };
+            setInterval(poke, 5 * 60 * 1000);
+            document.addEventListener('visibilitychange', function () {
+              if (!document.hidden) {
+                poke();
+                applyIfStale(reg);
+                offer(reg);
+              }
+            });
+            window.addEventListener('focus', poke);
+            window.addEventListener('online', poke);
+          }).catch(function () {});
+        };
+        if (document.readyState === 'complete') swGo();
+        else window.addEventListener('load', swGo);
+      }
+      })();

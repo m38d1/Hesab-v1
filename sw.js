@@ -1,6 +1,6 @@
 /* Precache service worker so the app really works offline.
    Bump CACHE whenever you ship a new build — a cached shell only refreshes when its cache name changes. */
-var CACHE = 'hesab-v20';
+var CACHE = 'hesab-v30';
 var ASSETS = [
   './',
   './index.html',
