@@ -1612,13 +1612,18 @@
           f.setAttribute('aria-expanded', 'true');
           pplCap(box, f);
         }
-        /* فهرست بلند نباید از بالای شیت بیرون بزند؛ قدش به فضای واقعیِ
-           بالای فیلد محدود می‌شود و خودش اسکرول می‌خورد. */
+        /* قد فهرست از روی خودِ سطرها حساب می‌شود: پنج تا کامل جا می‌شوند و
+           بقیه اسکرول می‌خورند. سقف ثابتِ پیکسلی روی گوشی‌هایی که متن
+           درشت‌تر دارند، چهارمی را نصفه می‌برید. اگر فضای بالای فیلد کم
+           باشد، فهرست به اندازهٔ همان فضا کوتاه می‌شود و اسکرول می‌خورد. */
         function pplCap(box, f) {
           var sh = $('sh');
           if (!sh) return;
           var room = f.getBoundingClientRect().top - sh.getBoundingClientRect().top - 8;
-          box.style.maxHeight = Math.max(64, Math.min(190, room)) + 'px';
+          var one = box.firstElementChild ? box.firstElementChild.getBoundingClientRect().height : 43;
+          if (!one) one = 43;
+          var want = one * 5 + 2;
+          box.style.maxHeight = Math.max(48, Math.min(want, room)) + 'px';
         }
         function pplHide() {
           var box = $('ppb');
