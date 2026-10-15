@@ -766,7 +766,6 @@
           width: min(46%, 260px);
           padding: 14px 16px;
         }
-        .wff,
         .wv {
           font-size: 20px;
         }
@@ -882,7 +881,7 @@
           transform: none;
         }
       }
-      .ani > *:not(.wrail) {
+      .ani > * {
         animation: rise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
       }
       .ani > *:nth-child(n + 3) {
@@ -890,13 +889,6 @@
       }
       .ani > *:nth-child(n + 5) {
         animation-delay: 0.1s;
-      }
-      /* کیف پول از انیمیشن rise بیرون می‌ماند. fill-mode: both یک
-         stacking context می‌سازد و transform نهایی، حتی none، فضای
-         سه‌بعدی را می‌بندد — یعنی چرخش کارت از کار می‌افتاد. */
-      .ani > .wrail,
-      .ani > .wrail > .wallet {
-        animation: none;
       }
       @keyframes grow {
         from {
@@ -934,6 +926,9 @@
       }
       .wc {
         transition: transform 0.2s;
+      }
+      .wc:active {
+        transform: scale(0.98);
       }
       /* سطر حساب در تنظیمات: کلیک‌پذیر، کل صفحه هدف لمس */
       .arow {
@@ -982,31 +977,8 @@
         font-size: 11px;
         margin-inline-start: 3px;
       }
-      .arow .ad {
-        color: var(--mute);
-        font-size: 18px;
-        line-height: 1;
-        padding-inline: 2px 6px;
-      }
-      /* ردیف رنگ کارت در مودال */
-      .swr {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-      .swr button {
-        width: 46px;
-        height: 34px;
-        border-radius: 10px;
-        border: 2px solid transparent;
-        cursor: pointer;
-        padding: 0;
-      }
-      .swr button.on {
-        border-color: var(--ink);
-        box-shadow: 0 0 0 2px var(--bg);
-      }
-      .btn,
+            /* ردیف رنگ کارت در مودال */
+                        .btn,
       .plus,
       .bar button,
       .seg button {
@@ -1143,129 +1115,56 @@
         height: 100%;
         border-radius: 9px;
       }
-      /* کیف پول. اسنپ لازم است وگرنه کاربر بعد از کشیدن هرجا می‌ماند و
-         کارت‌ها وسط‌چین نمی‌شوند. آنچه چرخش سه‌بعدی را می‌شکند اسنپ نبود،
-         انیمیشن ورود بود که fill-mode:both داشت و از این فهرست بیرون آمد. */
-      /* کیف پول تمام‌عرض. از ستون ۶۰۰ پیکسلی بیرون می‌زند تا از لبهٔ لبهٔ
-         صفحه رد شود، و کنارش همان‌قدر فاصله می‌ماند تا هر کارت با فاصلهٔ
-         برابر از دو طرف دیده شود — یعنی «نگاه‌کردن» به کارت بعدی. */
       .wallet {
-        /* عرض کارت. فاصلهٔ دو طرف را scroll-padding و padding-inline می‌دهند. */
-        --cw: min(72vw, 300px);
-        /* جای کارت اول از دو طرف برابر است تا وسط بیفتد. مقدار نهایی را
-           جاوااسکریپت از عرض واقعی کارت می‌نویسد؛ این فقط پیش‌فرض است. */
-        --lead: calc((100vw - 300px) / 2);
         display: flex;
         gap: 12px;
-        /* ریل خودش تمام‌عرض است، پس نوار دیگر نباید دوباره از ستون بیرون بزند. */
-        width: 100%;
-        margin-inline: 0;
-        /* ترتیب کارت‌ها راست‌به‌چپ است: «دارایی کل» اول می‌آید و بعدش
-           حساب‌ها، مثل خواندن فارسی. جابه‌جایی هم با translate انجام می‌شود
-           نه با اسکرول، پس جهت scrollLeft اینجا دیگر دردسری ندارد. */
-        direction: rtl;
-        /* اسکرول عمداً CSS نیست: جابه‌جایی دستی خودمان دقیق‌تر است و
-           سرِ فهرست را همان‌جا نگه می‌دارد. */
-        overflow: visible;
-        /* کشیدن افقی مال کارت‌هاست، کشیدن عمودی مال صفحه. بدون این،
-           مرورگر کشیدن افقی را به اسکرول می‌دزدد، pointercancel می‌فرستد
-           و کارت تکان نمی‌خورد. */
-        touch-action: pan-y;
-        /* پدینگ دو طرف برابر با نصف فضای خالی: کارت اول وسط می‌افتد و
-           کارت آخر هم با همان فاصله تمام می‌شود. */
-        padding: 2px var(--lead) 10px;
-      }
-      /* جابه‌جایی روی خودِ نوار نه: transform در هر عنصری که چرخش سه‌بعدی
-         دارد، فضا را flatten می‌کند. یک لایهٔ بیرونی اضافه می‌کنیم که
-         فقط ترجمه می‌کند و هیچ فرزند سه‌بعدی ندارد. */
-      /* ریل قابِ برش است، نه چیزی که جابه‌جا می‌شود. اگر خودِ ریل
-         transform بگیرد، برش همراهش حرکت می‌کند و کارت‌ها از قاب بیرون
-         می‌زنند. پس ریل تمام‌عرض می‌ماند و فقط نوارِ داخلش ترجمه می‌شود. */
-      .wrail {
-        width: 100vw;
-        margin-inline: calc(50% - 50vw);
-        overflow: hidden;
-      }
-      .wrail > .wallet {
-        transition: transform 0.35s cubic-bezier(0.25, 0.1, 0.2, 1);
-        will-change: transform;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        margin: 0 -16px 12px;
+        padding: 2px 16px 10px;
+        scrollbar-width: none;
       }
       .wallet::-webkit-scrollbar {
         display: none;
       }
-      /* 100vw در دسکتاپ عرض نوار پیمایش را هم حساب می‌کند و یک نوار
-         افقی می‌سازد. روی body نه روی html — overflow-x روی html
-         اسنپ را باطل می‌کند چون viewport اسکرول‌پذیر می‌شود. */
-      body {
-        overflow-x: clip;
-      }
-      /* توجه: هیچ transformی روی .wc نگذار. حتی translateZ(0) یک stacking
-         context می‌سازد و فرزندان را flatten می‌کند، یعنی چرخش کارت
-         از کار می‌افتد در حالی که کلاس on روی عنصر هست. */
       .wc {
         flex: none;
-        width: var(--cw);
-        /* نوار چپ‌به‌راست شد تا جابه‌جایی کار کند؛ محتوای کارت باید
-           دوباره راست‌به‌چپ شود وگرنه همه‌چیز چپ‌چین می‌افتد. */
-        direction: rtl;
-        /* ارتفاع از عرض می‌آید. aspect-ratio وقتی فرزندِ مطلق داشته باشیم
-           از محتوا ارتفاع می‌گیرد و کارت ۶۷۳ پیکسل بلند می‌شود — برای همین
-           فرزندها position:relative هستند و ارتفاع را خودِ نسبت می‌دهد. */
-        height: calc(var(--cw) / 1.586);
+        width: min(84%, 330px);
+        aspect-ratio: 1.586;
         border-radius: 24px;
+        padding: 18px 20px;
         color: #fff;
         position: relative;
-        scroll-snap-align: center;
-        display: block;
-        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
-      }
-      /* روی کارت: شمارهٔ کارت و مبلغ به حروف */
-      .wcno {
-        margin-top: 6px;
-        font-size: 11.5px;
-        letter-spacing: 0.5px;
-        opacity: 0.92;
-        font-variant-numeric: tabular-nums;
-      }
-      .wcn {
-        font-size: 12.5px;
-        font-weight: 600;
-        letter-spacing: 0.6px;
-        opacity: 0.95;
-        font-variant-numeric: tabular-nums;
-        margin-top: 5px;
-      }
-      .wcw {
-        font-size: 10.5px;
-        opacity: 0.72;
-        line-height: 1.5;
-        margin-top: 1px;
-        /* متن بلند نباید از کارت بیرون بزند */
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
         overflow: hidden;
-      }
-      /* روی کارت. overflow اینجا امن است چون دیگر چرخش سه‌بعدی نداریم و
-         گِردی گوشه‌ها را همین‌جا نگه می‌داریم. */
-      .wff {
-        position: absolute;
-        inset: 0;
-        height: 100%;
-        /* ارتفاع والد را از نسبت گرفته‌ایم، پس اینجا flex ستون می‌ماند */
-        padding: 18px 20px;
+        scroll-snap-align: center;
         display: flex;
         flex-direction: column;
-        border-radius: 24px;
-        overflow: hidden;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
       }
-      /* دایره‌های تزیینی پشت کارت حذف شدند: کارت باید یک سطح تمیز باشد
-         و متن شمارهٔ کارت و مبلغ به حروف روی همان خوانده شود. */
-      /* z-index لایه‌ها. .wi خودش relative است، پس قاعدهٔ عمومیِ
-         «فرزندِ کارت» نباید آن را دوباره position بدهد — وگرنه inset:0
-         بی‌اثر می‌ماند و لایه ارتفاع صفر می‌گیرد. */
-      .wc > *:not(.wi),
-      .wff > *,
+      .wc::before {
+        content: '';
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.12);
+        left: -70px;
+        top: -90px;
+      }
+      .wc::after {
+        content: '';
+        position: absolute;
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.09);
+        right: -40px;
+        bottom: -60px;
+      }
+      .wc > * {
+        position: relative;
+        z-index: 1;
+      }
       .wt {
         display: flex;
         justify-content: space-between;

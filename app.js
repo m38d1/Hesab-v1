@@ -977,7 +977,6 @@
           $('app').innerHTML = h;
           /* کیف پول تازه در صفحه نشسته؛ اندازه‌اش را می‌خوانیم و نوار را
              آمادهٔ جابه‌جایی می‌کنیم. */
-          if (tab === 'home') walletArm();
           $('bar').innerHTML = TABS.map(function (t) {
             return (
               '<button role="tab" data-tab="' +
@@ -2267,9 +2266,7 @@
                   fa(accBal(i)) +
                   '<i>' +
                   (S.unit === 'R' ? 'ریال' : 'تومان') +
-                  '</i></span>' +
-                  (S.acno[i] ? '<span class="ad">⋮</span>' : '') +
-                  '</button>'
+                  '</i></span></button>'
                 );
               })
               .join('') +
@@ -2279,13 +2276,6 @@
         }
         /* مودال ویرایش حساب: نام، ایموجی، موجودی اولیه، شمارهٔ کارت، رنگ. */
         function openAcc(i) {
-          var GR = [
-            (ACC[S.accent] || ACC.blue).g,
-            ACC.green.g,
-            ACC.purple.g,
-            ACC.orange.g,
-            ACC.teal.g,
-          ];
           $('sh').innerHTML =
             '<div class="grab"></div><h3>ویرایش حساب</h3>' +
             '<div class="fld"><label>نام حساب<input id="an2" value="' +
@@ -2294,34 +2284,17 @@
             '<label>موجودی اولیه<input id="ob2" class="amt" inputmode="numeric" placeholder="۰" value="' +
             (S.ob[i] ? fi(S.ob[i]) : '') +
             '"></label>' +
-            '<label>شمارهٔ کارت<input id="cn2" class="amt" inputmode="numeric" placeholder="۶۰۲۲۹۹۷۵۱۲۳۴۵۶۷۸" value="' +
-            fi0(S.acno[i] || '') +
-            '" style="direction:ltr;text-align:left"></label>' +
             '<label>ایموجی<input id="em2" value="' +
             esc(S.aem[i] || AIC[i] || '👛') +
             '" style="font-size:26px;text-align:center" maxlength="4"></label>' +
-            '<label>رنگ کارت</label><div class="swr" id="cw">' +
-            GR.map(function (g, j) {
-              return (
-                '<button data-cw="' +
-                j +
-                '" aria-label="رنگ ' +
-                (j + 1) +
-                '" style="background:' +
-                g +
-                '"' +
-                ((S.acol[i] || 0) === j ? ' class="on"' : '') +
-                '></button>'
-              );
-            }).join('') +
-            '</div></div>' +
+            '</div>' +
             '<div style="display:flex;gap:8px">' +
             '<button class="btn g" data-x="accsave">ذخیره</button>' +
             (AO(-1).length > 1
               ? '<button class="btn d" data-x="accdel">حذف حساب</button>'
               : '') +
-            '</div><p style="margin:10px 0 0;font-size:12.5px;color:var(--mute);line-height:1.7">شمارهٔ کارت روی پشت کارتِ صفحهٔ خانه نشان داده می‌شود. برنامه آن را فقط رمز می‌کند و جایی به‌جز ابری که خودت روشن کنی نمی‌فرستد.</p>';
-          accEd = { i: i, col: S.acol[i] || 0 };
+            '</div>';
+          accEd = { i: i };
           showSheet();
         }
         function accSave() {
@@ -2334,10 +2307,6 @@
           S.accs = ACCS;
           S.aem[i] = em;
           S.ob[i] = P($('ob2').value);
-          /* شمارهٔ کارت فقط رقم است و حداکثر ۱۹ رقم. digits() ارقام فارسی و عربی
-             را هم می‌پذیرد، پس کاربر می‌تواند با هر صفحه‌کلیدی بنویسد. */
-          S.acno[i] = String(digits($('cn2').value || '')).slice(0, 19);
-          S.acol[i] = accEd.col;
           accEd = null;
           save();
           closeSheet();
@@ -2390,127 +2359,7 @@
           closeSheet();
           render();
         }
-        /* ---------- کیف پول ----------
-           کارت‌ها با translate جابه‌جا می‌شوند، نه با اسکرول. نوار داخل یک
-           ریلِ تمام‌عرض است که فقط برش می‌دهد؛ خودِ نوار ترجمه می‌شود و
-           کارت‌های همسایه از دو طرف صفحه بیرون می‌مانند تا «نگاه کردن» به
-           کارت بعدی ممکن باشد.
-
-           حلقه بی‌پایان ندارد. به اول و آخر که می‌رسیم، نوار همان‌جا می‌ایستد
-           و کارتی تکرار نمی‌شود. */
-        var wIdx = 0,
-          wDrag = null;
-
-        /* فاصلهٔ دو کارت = عرضشان + گپ. */
-        function walletStep(w) {
-          var c = w.querySelector('.wc');
-          if (!c) return 0;
-          var gap = parseFloat(getComputedStyle(w).gap) || 0;
-          return c.getBoundingClientRect().width + gap;
-        }
-
-        /* نوار با هر render از نو ساخته می‌شود، پس اندازه‌ها باید بعد از آن
-           خوانده شوند. دو تایمر پشت‌سرهم یک چرخهٔ چیدمان کامل را صبر
-           می‌کند؛ اگر walletArm دوباره صدا زده شود، این تلاش بی‌اثر می‌ماند. */
-        var walletReady = 0;
-        function walletArm() {
-          var n = ++walletReady;
-          setTimeout(function () {
-            setTimeout(function () {
-              if (n !== walletReady) return;
-              try {
-                walletBuild();
-              } catch (e) {
-                if (window.console) console.error('walletBuild:', e);
-              }
-            });
-          });
-        }
-
-        function walletBuild() {
-          var w = document.querySelector('.wallet');
-          if (!w) {
-            walletArm();
-            return;
-          }
-          var cards = Array.prototype.filter.call(w.children, function (c) {
-            return c.classList && c.classList.contains('wc');
-          });
-          if (!cards.length) {
-            walletArm();
-            return;
-          }
-          var step = walletStep(w);
-          if (!step) return;
-          /* پدینگِ دو طرف را از عرض واقعی کارت می‌سازیم تا کارت اول روی
-             هر صفحه‌ای — از گوشی باریک تا دسکتاپ پهن — دقیقاً وسط بنشیند.
-             calcِ CSS با min() روی عرض ۳۰۰ ثابت درست حساب نمی‌کرد. */
-          var lead = Math.round((w.clientWidth - cards[0].getBoundingClientRect().width) / 2);
-          if (lead < 0) lead = 0;
-          w.style.paddingLeft = lead + 'px';
-          w.style.paddingRight = lead + 'px';
-          w.dataset.n = String(cards.length);
-          w.dataset.step = String(step);
-          wIdx = 0;
-          walletPlace(w, 0);
-        }
-
-        /* کارتِ idx را وسط می‌آورد و سرِ فهرست را نگه می‌دارد. */
-        function walletPlace(w, idx) {
-          var step = parseFloat(w.dataset.step) || 0;
-          if (!step) return;
-          var n = +w.dataset.n || 1;
-          if (idx < 0) idx = 0;
-          if (idx > n - 1) idx = n - 1;
-          wIdx = idx;
-          w.dataset.idx = String(idx);
-          /* جابه‌جایی روی خودِ نوار است، نه روی ریل: ریل قابِ برشِ ثابتِ
-             تمام‌عرض است و اگر او هم ترجمه بخورد، برش همراه کارت‌ها می‌رود
-             و کارت‌ها از قاب بیرون می‌زنند. */
-          if (!w.dataset.placed) {
-            w.dataset.placed = '1';
-            w.style.transition = 'none';
-            requestAnimationFrame(function () {
-              w.style.transition = '';
-            });
-          }
-          /* نوار راست‌به‌چپ است، پس کارتِ بعدی یک «step» سمت چپ‌تر می‌نشیند
-             و برای آوردنش به وسط باید نوار به راست برود. */
-          w.style.transform = 'translateX(' + Math.round(idx * step) + 'px)';
-        }
-
-        function walletStep1(w, dir) {
-          if (!w.dataset.step) return;
-          walletPlace(w, wIdx + dir);
-        }
-
-        function walletDown(e) {
-          if (e.pointerType === 'mouse' && e.button !== 0) return;
-          var t = e.target && e.target.closest ? e.target.closest('.wallet, .wrail') : null;
-          if (t && t.classList.contains('wrail')) t = t.querySelector('.wallet');
-          var w = t;
-          if (!w || !w.dataset.step) return;
-          wDrag = { x: e.clientX, y: e.clientY, w: w, id: e.pointerId };
-        }
-
-        function walletUp(e) {
-          if (!wDrag) return;
-          if (e.pointerId != null && wDrag.id != null && e.pointerId !== wDrag.id) return;
-          var dx = e.clientX - wDrag.x,
-            dy = e.clientY - wDrag.y;
-          var w = wDrag.w;
-          wDrag = null;
-          /* کشیدن افقی معنی دارد؛ کشیدن عمودی اسکرول صفحه است و باید
-             دست‌نخورده به همان بماند. */
-          if (Math.abs(dx) < 45 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-          walletStep1(w, dx < 0 ? 1 : -1);
-        }
-
-        /* اگر مرورگر کشیدن را وسط کار پس گرفت، کشیدنِ نیمه‌کاره نباید
-           کارت را تکان بدهد — فقط دادهٔ کشیدن پاک می‌شود. */
-        function walletCancel() {
-          wDrag = null;
-        }
+        /* ---------- کیف پول ---------- */
         function walletHtml(total, inc, exp) {
           var G = [
               (ACC[S.accent] || ACC.blue).g,
@@ -2522,13 +2371,11 @@
             ],
             u = S.unit === 'R' ? 'ریال' : 'تومان',
             ct = '<svg viewBox="0 0 24 24"><path d="M8.5 8.5a5 5 0 0 1 0 7M12 6a8.5 8.5 0 0 1 0 12M15.5 3.5a12 12 0 0 1 0 17"/></svg>';
-          function cd(g, t, v, l, r, b, ai) {
-            /* b = شمارهٔ کارت، که پایین همان کارت می‌نشیند.
-               ai = شمارهٔ حساب، تا لمس کارت مودال ویرایش همان حساب را
-               باز کند. بدون آن، لمس کارت هیچ کاری نمی‌کرد چون هیچ
-               نشانه‌ای برای اینکه کدام حساب است روی کارت نبود. */
-            var f =
-              '<div class="wff"><div class="wt"><span>' +
+          function cd(g, t, v, l, r) {
+            return (
+              '<div class="wc" style="background:' +
+              g +
+              '"><div class="wt"><span>' +
               t +
               '</span>' +
               r +
@@ -2537,51 +2384,14 @@
               fa(Math.abs(v)) +
               '<i>' +
               u +
-              '</i></div>' +
-              (b ? '<div class="wcno">' + b + '</div>' : '') +
-              '<div class="wb"><span>' +
+              '</i></div><div class="wb"><span>' +
               l +
               '</span>' +
               ct +
-              '</div></div>';
-            return (
-              '<div class="wc' +
-              (b ? ' acct' : '') +
-              '"' +
-              (ai != null ? ' data-acc="' + ai + '"' : '') +
-              ' style="background:' +
-              g +
-              '"><div class="wi">' +
-              f +
               '</div></div>'
             );
           }
-          /* پشت کارت: شمارهٔ کارت با رقم‌های فارسی و گروه چهارتایی،
-             و مبلغ به حروف. اگر شماره‌ای ثبت نشده باشد، به‌جای خالی
-             ماندن می‌گوید از کجا پر شود. */
-          function cnoFmt(s) {
-            var s = String(digits(s || '')).slice(0, 19);
-            if (!s) return '';
-            return s
-              .replace(/[0-9]/g, function (d) {
-                return '۰۱۲۳۴۵۶۷۸۹'[d];
-              })
-              .replace(/(.{4})/g, '$1 ')
-              .trim();
-          }
-          /* پایین کارت: شمارهٔ کارت با رقم فارسی و گروه چهارتایی، و مبلغ
-           به حروف. اگر شماره‌ای ثبت نشده، جای خالی می‌ماند. */
-        function cardBack(i, bal) {
-          var no = cnoFmt(S.acno[i]);
-          return (
-            '<div class="wcn">' +
-            esc(no) +
-            '</div><div class="wcw">' +
-            esc(words(S.unit === 'R' ? Math.round(bal * 10) : Math.round(bal))) +
-            '</div>'
-          );
-        }
-        var h = cd(
+          var h = cd(
             G[0],
             'دارایی کل',
             total,
@@ -2595,24 +2405,19 @@
               ' ⇄</button></span>',
           );
           AO(-1).forEach(function (i, j) {
-            /* هر حساب کارت خودش را دارد: رنگش از acol می‌آید و پشتش شمارهٔ
-               کارت و مبلغ به حروف. */
-            var bal = accBal(i);
             h += cd(
-              G[S.acol[i] != null ? S.acol[i] : (j + 1) % G.length],
+              G[(j + 1) % G.length],
               esc(ACCS[i]),
-              bal,
+              accBal(i),
               'موجودی حساب',
               '<span style="font-size:20px">' + esc(S.aem[i] || AIC[i] || '👛') + '</span>',
-              cardBack(i, bal),
-              i,
             );
           });
           if (S.assets.length) h += cd(G[4], 'دارایی غیرنقدی', assetsTotal(), 'قیمت دستی', '<span style="font-size:20px">💎</span>');
           return (
-            '<div class="wrail"><div class="wallet">' +
+            '<div class="wallet">' +
             h +
-            '</div></div><div class="mini"><div><small>درآمد ماه</small><b style="color:var(--grn)">' +
+            '</div><div class="mini"><div><small>درآمد ماه</small><b style="color:var(--grn)">' +
             fa(inc) +
             '</b></div><div><small>هزینه ماه</small><b style="color:var(--red)">' +
             fa(exp) +
@@ -3135,7 +2940,7 @@
 
         document.addEventListener('click', function (e) {
           var el = e.target.closest(
-            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam],[data-acc],[data-cw],[data-pp]',
+            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam],[data-acc],[data-pp]',
           );
           if (Date.now() - swD < 350) return;
           if (e.target.id === 'cov') return closeCal();
@@ -3194,14 +2999,7 @@
             closeCal();
           } else if (d.goal) openGoal(+d.goal);
           else if (d.acc !== undefined) openAcc(+d.acc);
-          else if (d.cw !== undefined && accEd) {
-            /* انتخاب رنگ کارت در مودال. فقط کلاس عوض می‌شود تا انتخاب
-               تا لحظهٔ ذخیره بماند. */
-            accEd.col = +d.cw;
-            Array.prototype.forEach.call(document.querySelectorAll('#cw button'), function (b) {
-              b.classList.toggle('on', b === el);
-            });
-          } else if (d.pp !== undefined) {
+          else if (d.pp !== undefined) {
             /* یکی از پیشنهادها انتخاب شد */
             var pick = pplHits[+d.pp];
             if (pick) {
@@ -3478,8 +3276,7 @@
             smsGo();
           } else if (d.x === 'smsave') {
             smsSave();
-          } else if (d.x === 'syon') syKeySheet();
-          else if (d.x === 'rst') {
+          } else if (d.x === 'rst') {
             if (el.dataset.s) {
               snapAct('همه داده‌ها حذف شد', function () {
                 S = { tx: [], bud: {}, theme: S.theme };
@@ -3598,29 +3395,6 @@
         $('plus').onclick = function () {
           openSheet();
         };
-        /* جابه‌جایی کارت‌ها با انگشت یا چرخ ماوس. روی سند گوش می‌دهد چون
-           نوار کیف پول با هر render از نو ساخته می‌شود. */
-        /* فقط pointer event. لمس هم pointer می‌فرستد، و گوش دادن به
-           touch و pointer با هم یک کشیدن را دوبار حساب می‌کرد. pointercancel
-           هم لازم است: اگر مرورگر کشیدن افقی را به اسکرول بدزدد، pointerup
-           هرگز نمی‌آید و کارت همان‌جا می‌ماند. */
-        document.addEventListener('pointerdown', walletDown, { passive: true });
-        document.addEventListener('pointerup', walletUp, { passive: true });
-        document.addEventListener('pointercancel', walletCancel, { passive: true });
-        document.addEventListener(
-          'wheel',
-          function (e) {
-            var t = e.target && e.target.closest ? e.target.closest('.wallet, .wrail') : null;
-            if (t && t.classList.contains('wrail')) t = t.querySelector('.wallet');
-            var w = t;
-            if (!w || !w.dataset.step) return;
-            var d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-            if (Math.abs(d) < 20) return;
-            e.preventDefault();
-            walletStep1(w, d > 0 ? 1 : -1);
-          },
-          { passive: false },
-        );
         document.addEventListener('keydown', function (e) {
           /* کلیدهای فهرست پیشنهاد، فقط وقتی باز است و ورودی شخص فعال است. */
           if (pplHits.length && $('fp') && document.activeElement === $('fp')) {
@@ -3653,6 +3427,23 @@
             }
           }
         });
+        load();
+        runPending();
+        render();
+        /* Chain: the mirror must not be rewritten before the rescue has had its say,
+           or a fresh empty state would overwrite the only surviving copy. */
+        mirrorRescue().then(function () {
+          mirror();
+        });
+        storageInfo().then(function (r) {
+          stOk = r[0];
+          stEst = r[1];
+          if (tab === 'set') render();
+        });
+        aniApp();
+        if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
+      })();
+
     if ('serviceWorker' in navigator) {
       var reloading = false,
         offered = false;
@@ -3708,19 +3499,3 @@
       if (document.readyState === 'complete') swGo();
       else window.addEventListener('load', swGo);
     }
-        load();
-        runPending();
-        render();
-        /* Chain: the mirror must not be rewritten before the rescue has had its say,
-           or a fresh empty state would overwrite the only surviving copy. */
-        mirrorRescue().then(function () {
-          mirror();
-        });
-        storageInfo().then(function (r) {
-          stOk = r[0];
-          stEst = r[1];
-          if (tab === 'set') render();
-        });
-        aniApp();
-        if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
-      })();
