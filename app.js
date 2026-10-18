@@ -1275,6 +1275,7 @@
                 rid: r.id,
               });
               r.next = nextDate(r.next, r.f, r.ad);
+              n++;
             }
           });
           if (n) save();
