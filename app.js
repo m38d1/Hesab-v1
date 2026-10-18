@@ -302,37 +302,7 @@
           });
         }
         /* نسخهٔ برنامه. سرِ هر انتشار همراه با CACHE در sw.js جلو می‌رود. */
-        var APP_V = '1.0.0',
-          /* نام کشی که روی همین دستگاه نشسته. از Cache Storage خوانده می‌شود،
-             چون همان چیزی است که واقعاً سرو می‌شود و می‌تواند از کد عقب بماند:
-             اگر اینجا «hesab-v41» نبود، یعنی دستگاه هنوز بیلد تازه را نگرفته. */
-          cacheV = '';
-        function cacheInfo() {
-          if (!window.caches || !caches.keys) return Promise.resolve('');
-          return caches
-            .keys()
-            .then(function (names) {
-              var top = 0;
-              names.forEach(function (n) {
-                var m = /^hesab-v(\d+)$/.exec(n);
-                if (m && +m[1] > top) top = +m[1];
-              });
-              return top ? 'hesab-v' + top : '';
-            })
-            .catch(function () {
-              return '';
-            });
-        }
-        /* On a first visit the worker installs after boot, so the name read at startup is
-           empty. Re-read whenever Settings is drawn; the re-render happens only when the
-           name actually changed, so this settles after one pass. */
-        function cacheRefresh() {
-          cacheInfo().then(function (n) {
-            if (n === cacheV) return;
-            cacheV = n;
-            if (tab === 'set') render();
-          });
-        }
+        var APP_V = '1.0.0';
         function storageInfo() {
           return Promise.all([
             navigator.storage && navigator.storage.persisted ? navigator.storage.persisted() : Promise.resolve(false),
@@ -938,7 +908,6 @@
           fr.readAsText(file);
         }
         function set() {
-          cacheRefresh();
           return (
             '<div class="head"><h1>تنظیمات</h1></div>' +
             '<div class="card"><h2>ظاهر</h2><div class="seg" style="margin:0">' +
@@ -964,7 +933,6 @@
             ' تراکنش</small></h2><div style="display:flex;gap:6px;margin-bottom:10px"><button class="btn g" data-x="dljson" style="margin:0;flex:1;font-size:14px;padding:11px 8px">دانلود فایل JSON</button><button class="btn g" data-x="upjson" style="margin:0;flex:1;font-size:14px;padding:11px 8px">خواندن فایل JSON</button></div><textarea id="bk" placeholder="یا متن پشتیبان را اینجا بچسبانید"></textarea><button class="btn g" data-x="exp">نمایش پشتیبان برای کپی</button><button class="btn g" data-x="imp">بازیابی</button><input type="file" id="bf" accept=".json,application/json,text/json" hidden></div>' +
             '<div class="card"><button class="btn d" data-x="rst" style="margin:0">حذف همه داده‌ها</button></div><p class="empty">داده‌ها فقط روی همین مرورگر ذخیره می‌شوند.<br><span style="font-size:12.5px">نسخهٔ ' +
             pn(APP_V) +
-            (cacheV ? ' · کش ' + cacheV : '') +
             '</span></p>'
           );
         }
@@ -3418,7 +3386,6 @@
           stEst = r[1];
           if (tab === 'set') render();
         });
-        cacheRefresh();
         aniApp();
         if (loadBroken) toast('داده‌های ذخیره‌شده خراب بود؛ یک کپی خام از آن نگه داشته شد و برنامه از صفر شروع شد.');
             if ('serviceWorker' in navigator) {

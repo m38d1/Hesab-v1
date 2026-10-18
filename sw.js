@@ -1,6 +1,5 @@
 /* Precache service worker so the app really works offline.
-   Bump CACHE whenever you ship a new build — a cached shell only refreshes when its cache name changes.
-   The number shown at the bottom of Settings comes from this name, so keep the two in sync. */
+   Bump CACHE whenever you ship a new build — a cached shell only refreshes when its cache name changes. */
 var CACHE = 'hesab-v41';
 var ASSETS = [
   './',
