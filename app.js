@@ -1,4 +1,3 @@
-
       (function () {
         var CATS = {
           out: ['خوراک', 'حمل‌ونقل', 'مسکن', 'قبوض', 'سلامت', 'تفریح', 'خرید', 'سایر'],
@@ -59,51 +58,6 @@
              جایی ندارد. */
           return fr0(S.unit === 'R' ? Math.round(n * 10) : Math.round(n));
         };
-        /* ارقام فارسی برای فیلدی که اصلاً پول نیست (شمارهٔ کارت). */
-        var fi0 = function (s) {
-          return String(s || '').replace(/[0-9]/g, function (d) {
-            return '۰۱۲۳۴۵۶۷۸۹'[d];
-          });
-        };
-        /* یک، دو، سه … برای نوشتن مبلغ روی کارت. ارقام فارسی با اعداد
-           لاتین نوشته می‌شوند چون خواناتر است و با بقیهٔ رابط هم‌خوان. */
-        var WD = ['صفر', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه'],
-          WT = ['ده', 'یازده', 'دوازده', 'سیزده', 'چهارده', 'پانزده', 'شانزده', 'هفده', 'هجده', 'نوزده'],
-          WY = ['بیست', 'سی', 'چهل', 'پنجاه', 'شصت', 'هفتاد', 'هشتاد', 'نود'],
-          WH = ['', 'صد', 'دویست', 'سیصد', 'چهارصد', 'پانصد', 'ششصد', 'هفتصد', 'هشتصد', 'نهصد'],
-          WM = ['', ' هزار', ' میلیون', ' میلیارد', ' بیلیون', ' تریلیون'],
-          wtri = function (v) {
-            var out = [];
-            if (v >= 100) out.push(WH[Math.floor(v / 100)]);
-            var r = v % 100;
-            if (r) out.push(r < 10 ? WD[r] : r < 20 ? WT[r - 10] : r % 10 ? WY[Math.floor(r / 10) - 2] + ' و ' + WD[r % 10] : WY[Math.floor(r / 10) - 2]);
-            return out.join(' و ');
-          };
-        var words = function (v) {
-          v = Math.floor(Math.abs(Number(v) || 0));
-          if (!v) return 'صفر';
-          var g = [],
-            i = 0,
-            c;
-          while (v > 0 && i < WM.length) {
-            /* گروه صفر باید حذف شود. «صفر هزار» غلط است و رشتهٔ « هزار»
-               هم چون خالی نیست از صافیِ filter رد می‌شد. */
-            c = v % 1000;
-            if (c) g.push([c, i]);
-            v = Math.floor(v / 1000);
-            i++;
-          }
-          /* در فارسی فقط «هزار» بدون «یک» می‌آید: ۱۰۰۰ می‌شود «هزار»،
-             ولی ۱۰۰۰۰۰۰ «یک میلیون» است و ۱۰۰۰۰۰۰۰۰ «یک میلیارد».
-             این هم فقط وقتی که هزار تنها گروه باشد؛ ۱۰۰۱ «یک هزار و یک» است. */
-          if (g.length === 1 && g[0][0] === 1 && g[0][1] === 1) return 'هزار';
-          return g
-            .reverse()
-            .map(function (x) {
-              return wtri(x[0]) + WM[x[1]];
-            })
-            .join(' و ');
-        };
         var fa = function (n) {
           return HIDE ? '•••' : fi(n);
         };
@@ -116,6 +70,18 @@
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
           });
         };
+        /* ورودی کاربر پیش از ذخیره از نویسه‌های قالب پاک و از دو سر بریده
+           می‌شود. رندر هم جداجدا escape می‌کند، پس این یک لایهٔ دفاعی است. */
+        var clean = function (s) {
+          return String(s == null ? '' : s)
+            .replace(/[<>&"]/g, '')
+            .trim();
+        };
+        /* همهٔ رکوردها شناسهٔ یکتا دارند؛ این جست‌وجوی مشترک است. */
+        function findById(list, id) {
+          var a = arr(list);
+          for (var i = 0; i < a.length; i++) if (a[i] && a[i].id === id) return a[i];
+        }
         function load() {
           var raw = null;
           try {
@@ -169,18 +135,7 @@
           S.assets = arr(S.assets);
           S.debts = arr(S.debts);
           S.aem = arr(S.aem);
-          /* شمارهٔ کارت و رنگ کارت روی پشت کارت دیده می‌شوند. هر دو اختیاری‌اند
-             و باید همیشه هم‌طول با فهرست حساب‌ها بمانند. */
-          S.acno = arr(S.acno).map(function (x) {
-            return String(digits(typeof x === 'string' ? x : '')).slice(0, 19);
-          });
-          S.acol = arr(S.acol).map(function (x) {
-            x = parseInt(x, 10);
-            return x >= 0 && x < 5 ? x : 0;
-          });
           while (S.aem.length < S.accs.length) S.aem.push('');
-          while (S.acno.length < S.accs.length) S.acno.push('');
-          while (S.acol.length < S.accs.length) S.acol.push(0);
           S.bud = S.bud && typeof S.bud === 'object' && !Array.isArray(S.bud) ? S.bud : {};
           while (S.ob.length < S.accs.length) S.ob.push(0);
           S.unit = S.unit === 'R' ? 'R' : 'T';
@@ -530,7 +485,7 @@
           return d || null;
         }
         function mLabel(y, m) {
-          return MN[m - 1] + ' ' + String(y).replace(/\d/g, function (c) { return '۰۱۲۳۴۵۶۷۸۹'[c]; });
+          return MN[m - 1] + ' ' + pn(y);
         }
         /* Month of the newest transaction, but only when it is not the month on screen. */
         function jumpHint() {
@@ -602,9 +557,7 @@
             '<button data-m="-1" aria-label="ماه قبل"><svg class="chv" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button><span>' +
             MN[cur.m - 1] +
             ' ' +
-            String(cur.y).replace(/\d/g, function (d) {
-              return '۰۱۲۳۴۵۶۷۸۹'[d];
-            }) +
+            pn(cur.y) +
             '</span><button data-m="1" aria-label="ماه بعد"><svg class="chv" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button></div></div>'
           );
         }
@@ -1009,9 +962,7 @@
         function openSheet(id) {
           editId = id || null;
           var t = id
-            ? S.tx.filter(function (x) {
-                return x.id === id;
-              })[0]
+            ? findById(S.tx, id)
             : Object.assign({ type: 'out', amount: '', cat: '', acc: AO(-1)[0], date: today(), note: '' }, smsPre);
           smsPre = null;
           sType = t.type;
@@ -1149,11 +1100,7 @@
         }
         function openGoal(id) {
           editId = id || null;
-          var g = id
-            ? S.goals.filter(function (x) {
-                return x.id === id;
-              })[0]
-            : null;
+          var g = id ? findById(S.goals, id) : null;
           $('sh').innerHTML =
             '<div class="grab"></div><h3>' +
             (g ? esc(g.name) : 'هدف جدید') +
@@ -1170,15 +1117,13 @@
         }
         function goalAct(k) {
           var a = P(($('ga') || { value: '' }).value),
-            g = S.goals.filter(function (x) {
-              return x.id === editId;
-            })[0];
+            g = findById(S.goals, editId);
           if (k === 'gnew') {
             var n = ($('gn').value || '').trim();
             if (!n || !a) return;
             S.goals.push({ id: nid(), name: n, target: a, saved: 0 });
           } else if (k === 'gsave' && g) {
-            var gn = (($('gn') || {}).value || '').replace(/[<>&"]/g, '').trim(),
+            var gn = clean(($('gn') || {}).value),
               gt = P(($('gt') || { value: '' }).value);
             if (!gn || !gt) return;
             g.name = gn;
@@ -1357,11 +1302,7 @@
         }
         function openLoan(id) {
           editId = id || null;
-          var l = id
-            ? S.loans.filter(function (x) {
-                return x.id === id;
-              })[0]
-            : null;
+          var l = id ? findById(S.loans, id) : null;
           $('sh').innerHTML =
             '<div class="grab"></div><h3>' +
             (l ? esc(l.name) : 'وام جدید') +
@@ -1409,11 +1350,9 @@
           dateSel(l ? l.first : today());
         }
         function loanAct(k) {
-          var l = S.loans.filter(function (x) {
-            return x.id === editId;
-          })[0];
+          var l = findById(S.loans, editId);
           if (k === 'lnew' || k === 'lsave') {
-            var n = ($('ln').value || '').replace(/[<>&"]/g, '').trim(),
+            var n = clean($('ln').value),
               a = P($('la').value),
               c = parseInt(digits($('lc').value), 10) || 0,
               p = parseInt(digits($('lp').value), 10) || 0;
@@ -1655,7 +1594,7 @@
         }
         function personPick() {
           var f = $('fp');
-          var n = ((f && f.value) || '').replace(/[<>&"]/g, '').trim();
+          var n = clean(f && f.value);
           if (!n) return undefined;
           /* اسمی که در فهرست نبود، همین‌جا به فهرست اضافه می‌شود تا دفعهٔ
              بعد پیشنهاد داده شود. */
@@ -1831,36 +1770,15 @@
         }
         function exportCsv(all) {
           var txt = csvText(all),
-            name = 'hesab-' + (all ? 'all' : cur.y + '-' + String(cur.m).padStart(2, '0')) + '.csv',
-            fb = function () {
-              var b = $('bk');
-              if (b) {
-                b.value = txt;
-                b.select();
-              }
-            };
-          if (!(window.claude && window.claude.use)) {
-            try {
-              var a = document.createElement('a');
-              a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' }));
-              a.download = name;
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-            } catch (e) {
-              fb();
-            }
-            return;
+            name = 'hesab-' + (all ? 'all' : cur.y + '-' + String(cur.m).padStart(2, '0')) + '.csv';
+          /* دانلود مستقیم؛ اگر مرورگر اجازه نداد، متن در کادر پشتیبان می‌نشیند
+             تا دستی کپی شود. */
+          if (saveBlob(txt, name, 'text/csv;charset=utf-8')) return;
+          var b = $('bk');
+          if (b) {
+            b.value = txt;
+            b.select();
           }
-          window.claude.use('downloads').then(function (d) {
-            if (!d) {
-              fb();
-              return;
-            }
-            return d.save({ filename: name, data: txt }).catch(function (e) {
-              if (!e || e.code !== 'declined') fb();
-            });
-          });
         }
         var dP = '',
           dD = 'g';
@@ -1934,11 +1852,7 @@
         }
         function openAsset(id) {
           editId = id || null;
-          var a = id
-            ? S.assets.filter(function (x) {
-                return x.id === id;
-              })[0]
-            : null;
+          var a = id ? findById(S.assets, id) : null;
           $('sh').innerHTML =
             '<div class="grab"></div><h3>' +
             (a ? esc(a.name) : 'دارایی جدید') +
@@ -1955,15 +1869,13 @@
           showSheet();
         }
         function assetAct(k) {
-          var a = S.assets.filter(function (x) {
-            return x.id === editId;
-          })[0];
+          var a = findById(S.assets, editId);
           if (k === 'asdel') {
             S.assets = S.assets.filter(function (x) {
               return x !== a;
             });
           } else {
-            var n = ($('asn').value || '').replace(/[<>&"]/g, '').trim(),
+            var n = clean($('asn').value),
               q = num($('asq').value),
               p = P($('ap').value),
               c = P($('ac').value);
@@ -2110,9 +2022,7 @@
           dateSel(today());
         }
         function openDebtEntry(id) {
-          var x = S.debts.filter(function (y) {
-            return y.id === id;
-          })[0];
+          var x = findById(S.debts, id);
           if (!x) return;
           editId = id;
           dP = x.p;
@@ -2137,12 +2047,10 @@
         }
         function debtAct(k) {
           if (k === 'desave') {
-            var ex = S.debts.filter(function (y) {
-              return y.id === editId;
-            })[0];
+            var ex = findById(S.debts, editId);
             if (!ex) return;
             var am = P($('da').value),
-              nte = ($('dn').value || '').replace(/[<>&"]/g, '').trim();
+              nte = clean($('dn').value);
             if (!am) return;
             ex.amt = am;
             ex.date = getDate();
@@ -2161,7 +2069,7 @@
               render();
             });
           } else if (k === 'dsave') {
-            var p = dP || ($('dpn') ? $('dpn').value : '').replace(/[<>&"]/g, '').trim() || ($('dps') ? $('dps').value : ''),
+            var p = dP || clean($('dpn') ? $('dpn').value : '') || ($('dps') ? $('dps').value : ''),
               a = P($('da').value);
             if (!p || !a) return;
             if (S.ppl.indexOf(p) < 0) S.ppl.push(p);
@@ -2171,7 +2079,7 @@
               s: dD === 'g' ? 1 : -1,
               amt: a,
               date: getDate(),
-              note: ($('dn').value || '').replace(/[<>&"]/g, '').trim(),
+              note: clean($('dn').value),
             });
             save();
             openPerson(p);
@@ -2333,8 +2241,8 @@
         function accSave() {
           if (!accEd) return;
           var i = accEd.i,
-            nm = ($('an2').value || '').replace(/[<>&"]/g, '').trim(),
-            em = ($('em2').value || '').trim().slice(0, 4);
+            nm = clean($('an2').value),
+            em = clean($('em2').value).slice(0, 4);
           if (!nm) return;
           ACCS[i] = nm;
           S.accs = ACCS;
@@ -2354,8 +2262,6 @@
              بعد از آن جابه‌جا می‌شود، پس باید همان‌جا بمانند. */
           S.accs.splice(i, 1);
           S.aem.splice(i, 1);
-          S.acno.splice(i, 1);
-          S.acol.splice(i, 1);
           S.ob.splice(i, 1);
           S.off = S.off.map(function (x) {
             return x > i ? x - 1 : x === i ? 0 : x;
@@ -2502,9 +2408,7 @@
           }, undo && label === 'برگردان' ? 5000 : 15000);
         }
         function delTx(id) {
-          var t = S.tx.filter(function (x) {
-            return x.id === id;
-          })[0];
+          var t = findById(S.tx, id);
           if (!t) return;
           S.tx = S.tx.filter(function (x) {
             return x.id !== id;
@@ -2623,53 +2527,6 @@
         }
         document.addEventListener('pointerup', swEnd);
         document.addEventListener('pointercancel', swEnd);
-        var EM = [
-          '💵',
-          '💰',
-          '🏦',
-          '💳',
-          '🪙',
-          '💎',
-          '👛',
-          '🧾',
-          '🏠',
-          '🚗',
-          '🛒',
-          '🍽',
-          '✈️',
-          '🎓',
-          '💼',
-          '📈',
-          '🏪',
-          '🎁',
-          '🏥',
-          '📱',
-          '💡',
-          '🐷',
-          '🔒',
-          '⭐',
-          '🏧',
-          '💸',
-          '👜',
-          '🧳',
-        ];
-        function openEmoji(i) {
-          $('sh').innerHTML =
-            '<div class="grab"></div><h3>ایموجی حساب</h3><div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:8px">' +
-            EM.map(function (e) {
-              return (
-                '<button data-ep="' +
-                i +
-                '|' +
-                e +
-                '" style="font-size:26px;padding:10px 0;border-radius:14px;background:var(--card)">' +
-                e +
-                '</button>'
-              );
-            }).join('') +
-            '</div>';
-          showSheet();
-        }
         /* ---------- Hide amounts ---------- */
         var EYE = '<svg class="eyei" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
           EYE_OFF = '<svg class="eyei" viewBox="0 0 24 24"><path d="M3 3l18 18M10.6 5.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6C3.7 8.3 2 12 2 12s3.6 7 10 7c1.7 0 3.2-.4 4.5-1M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
@@ -2975,23 +2832,24 @@
           $('sh').classList.remove('on');
         }
 
-        document.addEventListener('click', function (e) {
-          var el = e.target.closest(
-            '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-ad],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-eo],[data-ep],[data-sam],[data-acc],[data-pp]',
-          );
-          if (Date.now() - swD < 350) return;
-          if (e.target.id === 'cov') return closeCal();
-          if (e.target.id === 'ov') return closeSheet();
-          if (!el) return;
-          var d = el.dataset;
-          if (d.tab) {
+        /* ---------- Delegated clicks ----------
+           هر دکمه در data-* می‌گوید چه کاری می‌کند. دو جست‌وجوی جدا انجام
+           می‌شود: data-x یک فرمان را نام می‌برد و هر data-* دیگر یک کار.
+           هیچ عنصری هر دو را با هم ندارد، پس این دو هرگز به هم نمی‌خورند. */
+        var CLICK_SEL =
+          '[data-tab],[data-m],[data-jump],[data-f],[data-t],[data-x],[data-edit],[data-st],[data-c],[data-pd],[data-goal],[data-af],[data-rd],[data-cd],[data-loan],[data-u],[data-pdel],[data-asset],[data-debt],[data-dd],[data-de],[data-ddir],[data-lq],[data-sub],[data-ac],[data-hide],[data-su],[data-sam],[data-acc],[data-pp]';
+
+        /* کارهایی که با نام خودِ data-* صدا زده می‌شوند. */
+        var AACT = {
+          tab: function (d) {
             tab = d.tab;
             render();
             scrollTo(0, 0);
             aniApp();
+          },
           /* d.m صفر هم معنی دارد: «برگشت به امروز». و نباید به shift گره بخورد،
              چون shift با صفر همان ماه فعلی را برمی‌گرداند، نه ماه امروز. */
-          } else if (d.m !== undefined) {
+          m: function (d) {
             var n = +d.m;
             if (n === 0) {
               var tp = parts(today());
@@ -3006,7 +2864,8 @@
             }
             render();
             scrollTo(0, 0);
-          } else if (d.jump) {
+          },
+          jump: function (d) {
             var jp = parts(d.jump);
             cur.y = jp.y;
             cur.m = jp.m;
@@ -3014,13 +2873,16 @@
             aflt = -1;
             render();
             scrollTo(0, 0);
-          } else if (d.f) {
+          },
+          f: function (d) {
             flt = d.f;
             render();
-          } else if (d.af) {
+          },
+          af: function (d) {
             aflt = +d.af;
             render();
-          } else if (d.c) {
+          },
+          c: function (d) {
             cal.m += +d.c;
             if (cal.m > 12) {
               cal.m = 1;
@@ -3031,12 +2893,18 @@
               cal.y--;
             }
             drawCal();
-          } else if (d.pd) {
+          },
+          pd: function (d) {
             dateSel(j2g(cal.y, cal.m, +d.pd));
             closeCal();
-          } else if (d.goal) openGoal(+d.goal);
-          else if (d.acc !== undefined) openAcc(+d.acc);
-          else if (d.pp !== undefined) {
+          },
+          goal: function (d) {
+            openGoal(+d.goal);
+          },
+          acc: function (d) {
+            openAcc(+d.acc);
+          },
+          pp: function (d) {
             /* یکی از پیشنهادها انتخاب شد */
             var pick = pplHits[+d.pp];
             if (pick) {
@@ -3044,33 +2912,108 @@
               pplHide();
               $('fp').focus();
             }
-          } else if (d.eo) openEmoji(+d.eo);
-          else if (d.ep) {
-            var ep = d.ep.split('|');
-            S.aem[+ep[0]] = ep[1];
-            save();
-            closeSheet();
-            render();
-          } else if (d.loan) openLoan(+d.loan);
-          else if (d.u) {
+          },
+          loan: function (d) {
+            openLoan(+d.loan);
+          },
+          u: function (d) {
             S.unit = d.u;
             save();
             render();
-          } else if (d.ad) {
-            if (AO(-1).length > 1) {
-              snapAct('حساب «' + (ACCS[+d.ad] || '') + '» حذف شد', function () {
-                S.off.push(+d.ad);
-                save();
-                render();
-              });
-            }
-          } else if (d.pdel) {
+          },
+          pdel: function (d) {
             snapAct('شخص «' + (S.ppl[+d.pdel] || '') + '» حذف شد', function () {
               S.ppl.splice(+d.pdel, 1);
               save();
               render();
             });
-          } else if (d.x === 'persists') {
+          },
+          asset: function (d) {
+            openAsset(+d.asset);
+          },
+          debt: function (d) {
+            openPerson(d.debt);
+          },
+          dd: function (d) {
+            S.debts = S.debts.filter(function (x) {
+              return x.id !== +d.dd;
+            });
+            save();
+            openPerson(dP);
+            render();
+          },
+          de: function (d) {
+            openDebtEntry(+d.de);
+          },
+          ddir: function (d) {
+            dD = d.ddir;
+            document.querySelectorAll('[data-ddir]').forEach(function (b) {
+              b.setAttribute('aria-pressed', b.dataset.ddir === dD);
+            });
+          },
+          lq: function (d) {
+            editId = +d.lq;
+            loanAct('lpay');
+          },
+          sub: function (d) {
+            sub = d.sub;
+            render();
+            aniApp();
+          },
+          ac: function (d) {
+            S.accent = d.ac;
+            save();
+            render();
+          },
+          rd: function (d) {
+            S.rec = S.rec.filter(function (r) {
+              return r.id !== +d.rd;
+            });
+            save();
+            render();
+          },
+          cd: function (d) {
+            var q2 = d.cd.split(',');
+            snapAct('دسته «' + ((S.cl[q2[0]] || [])[+q2[1]] || {}).n + '» حذف شد', function () {
+              var gone = S.cl[q2[0]].splice(+q2[1], 1)[0];
+              if (gone && q2[0] === 'out') delete S.bud[gone.n];
+              save();
+              render();
+            });
+          },
+          t: function (d) {
+            S.theme = d.t;
+            save();
+            render();
+          },
+          edit: function (d) {
+            openSheet(+d.edit);
+          },
+          st: function (d) {
+            sType = d.st;
+            document.querySelectorAll('[data-st]').forEach(function (b) {
+              b.setAttribute('aria-pressed', b.dataset.st === sType);
+            });
+            fillCats();
+          },
+          hide: function () {
+            HIDE = !HIDE;
+            try {
+              localStorage.setItem(HIDEK, HIDE ? '1' : '0');
+            } catch (e) {}
+            render();
+          },
+          su: function (d) {
+            smU = d.su;
+            document.querySelectorAll('[data-su]').forEach(function (b) {
+              b.setAttribute('aria-pressed', b.dataset.su === smU);
+            });
+          },
+        };
+
+        /* فرمان‌هایی که با data-x صدا زده می‌شوند. */
+        var XACT = {
+          persists: function () {
             var go = navigator.storage && navigator.storage.persist ? navigator.storage.persist() : Promise.resolve(false);
             go.then(function (ok) {
               return storageInfo().then(function (r) {
@@ -3080,57 +3023,8 @@
                 toast(ok ? 'حافظه پایدار شد' : 'مرورگر نپذیرفت؛ برنامه را به صفحه اصلی اضافه کن');
               });
             });
-          } else if (d.asset) openAsset(+d.asset);
-          else if (d.debt) openPerson(d.debt);
-          else if (d.dd) {
-            S.debts = S.debts.filter(function (x) {
-              return x.id !== +d.dd;
-            });
-            save();
-            openPerson(dP);
-            render();
-          } else if (d.ddir) {
-            dD = d.ddir;
-            document.querySelectorAll('[data-ddir]').forEach(function (b) {
-              b.setAttribute('aria-pressed', b.dataset.ddir === dD);
-            });
-          } else if (d.lq) {
-            editId = +d.lq;
-            loanAct('lpay');
-          } else if (d.sub) {
-            sub = d.sub;
-            render();
-            aniApp();
-          } else if (d.ac) {
-            S.accent = d.ac;
-            save();
-            render();
-          } else if (d.rd) {
-            S.rec = S.rec.filter(function (r) {
-              return r.id !== +d.rd;
-            });
-            save();
-            render();
-          } else if (d.cd) {
-            var q2 = d.cd.split(',');
-            snapAct('دسته «' + ((S.cl[q2[0]] || [])[+q2[1]] || {}).n + '» حذف شد', function () {
-              var gone = S.cl[q2[0]].splice(+q2[1], 1)[0];
-              if (gone && q2[0] === 'out') delete S.bud[gone.n];
-              save();
-              render();
-            });
-          } else if (d.t) {
-            S.theme = d.t;
-            save();
-            render();
-          } else if (d.edit) openSheet(+d.edit);
-          else if (d.st) {
-            sType = d.st;
-            document.querySelectorAll('[data-st]').forEach(function (b) {
-              b.setAttribute('aria-pressed', b.dataset.st === sType);
-            });
-            fillCats();
-          } else if (d.x === 'save') {
+          },
+          save: function () {
             var a = P($('fa').value);
             if (!a) {
               $('fa').focus();
@@ -3176,75 +3070,73 @@
             save();
             closeSheet();
             render();
-          } else if (d.x === 'addacc') {
-            var an = $('an')
-              .value.replace(/[<>&"]/g, '')
-              .trim();
+          },
+          addacc: function () {
+            var an = clean($('an').value);
             if (!an) return;
             S.accs.push(an);
             S.ob.push(P($('ao').value));
-            /* حساب تازه باید جای خالی در همهٔ فهرست‌های موازی داشته باشد،
-               وگرنه شمارهٔ کارت و رنگِ حساب بعدی به حساب تازه می‌چسبد. */
+            /* حساب تازه باید جای خالی در همهٔ فهرست‌های موازی داشته باشد. */
             S.aem.push('');
-            S.acno.push('');
-            S.acol.push(0);
             save();
             render();
-          } else if (d.x === 'addppl') {
-            var pn = $('pnn')
-              .value.replace(/[<>&"]/g, '')
-              .trim();
+          },
+          addppl: function () {
+            var pn = clean($('pnn').value);
             if (!pn || S.ppl.indexOf(pn) > -1) return;
             S.ppl.push(pn);
             save();
             render();
-          } else if (d.x === 'asopen') openAsset();
-          else if (d.x === 'accsave') accSave();
-          else if (d.x === 'accdel') accDel();
-          else if (/^as(save|del)$/.test(d.x)) assetAct(d.x);
-          else if (d.x === 'dnew') openDebt('', 'g');
-          else if (d.de) openDebtEntry(+d.de);
-          else if (d.x === 'dgive') openDebt(dP, 'g');
-          else if (d.x === 'dget') openDebt(dP, 'r');
-          else if (d.x === 'dsave' || d.x === 'dsettle' || d.x === 'desave' || d.x === 'dedel') debtAct(d.x);
-          else if (d.x === 'csvm') exportCsv(false);
-          else if (d.x === 'csva') exportCsv(true);
-          else if (d.x === 'lopen') openLoan();
-          else if (/^l(new|save|pay|del)$/.test(d.x)) loanAct(d.x);
-          else if (d.x === 'addcat') {
-            var nm = $('cn')
-              .value.replace(/[<>&"]/g, '')
-              .trim();
-            var ck = $('ck').value;
+          },
+          asopen: function () {
+            openAsset();
+          },
+          accsave: accSave,
+          accdel: accDel,
+          dnew: function () {
+            openDebt('', 'g');
+          },
+          dgive: function () {
+            openDebt(dP, 'g');
+          },
+          dget: function () {
+            openDebt(dP, 'r');
+          },
+          csvm: function () {
+            exportCsv(false);
+          },
+          csva: function () {
+            exportCsv(true);
+          },
+          lopen: function () {
+            openLoan();
+          },
+          addcat: function () {
+            var nm = clean($('cn').value),
+              ck = $('ck').value;
             if (!nm || CATS[ck].indexOf(nm) > -1) return;
-            S.cl[ck].push({
-              c: '#8e8e93',
-              n: nm,
-              e: (
-                $('ce')
-                  .value.replace(/[<>&"]/g, '')
-                  .trim() || '•'
-              ).slice(0, 4),
-            });
+            S.cl[ck].push({ c: '#8e8e93', n: nm, e: clean($('ce').value).slice(0, 4) || '•' });
             save();
             render();
-          } else if (d.x === 'cal') openCal();
-          else if (d.x === 'ctoday') {
+          },
+          cal: openCal,
+          ctoday: function () {
             dateSel(today());
             closeCal();
-          } else if (d.x === 'cclose') closeCal();
-          else if (d.x === 'name') openName();
-          else if (d.x === 'savename') {
+          },
+          cclose: closeCal,
+          name: openName,
+          savename: function () {
             S.name = $('nmi').value.trim();
             save();
             closeSheet();
             render();
-          } else if (d.x === 'gopen') openGoal();
-          else if (/^g(new|save|add|sub|del)$/.test(d.x)) goalAct(d.x);
-          else if (d.x === 'dup') {
-            var t0 = S.tx.filter(function (x) {
-              return x.id === editId;
-            })[0];
+          },
+          gopen: function () {
+            openGoal();
+          },
+          dup: function () {
+            var t0 = findById(S.tx, editId);
             if (t0) {
               S.tx.push(Object.assign({}, t0, { id: nid(), date: today() }));
               cur = parts(today());
@@ -3252,19 +3144,22 @@
               closeSheet();
               render();
             }
-          } else if (d.x === 'del') {
+          },
+          del: function () {
             var di = editId;
             closeSheet();
             delTx(di);
-          } else if (d.x === 'dljson') {
-            exportJson();
-          } else if (d.x === 'upjson') {
+          },
+          dljson: exportJson,
+          upjson: function () {
             var bf = $('bf');
             if (bf) bf.click();
-          } else if (d.x === 'exp') {
+          },
+          exp: function () {
             $('bk').value = JSON.stringify(S);
             $('bk').select();
-          } else if (d.x === 'imp') {
+          },
+          imp: function () {
             /* Snapshot first: this is the one action that can replace the entire dataset. */
             var raw = $('bk').value,
               prev = S,
@@ -3282,38 +3177,21 @@
               aflt = -1;
               render();
               save();
-              toast(
-                'پشتیبان بازیابی شد' + (nd ? ' — نمایش ' + mLabel(cur.y, cur.m) : ''),
-                function () {
-                  snapTo(pre.id, 'بازیابی برگشت خورد');
-                },
-              );
+              toast('پشتیبان بازیابی شد' + (nd ? ' — نمایش ' + mLabel(cur.y, cur.m) : ''), function () {
+                snapTo(pre.id, 'بازیابی برگشت خورد');
+              });
             } catch (x) {
               S = prev;
               snapDrop(pre.id);
               $('bk').value = raw;
               $('bk').placeholder = 'متن پشتیبان معتبر نیست؛ داده‌های فعلی دست‌نخورده ماند.';
             }
-          } else if (d.hide) {
-            HIDE = !HIDE;
-            try {
-              localStorage.setItem(HIDEK, HIDE ? '1' : '0');
-            } catch (e) {}
-            render();
-          } else if (d.x === 'sms') {
-            openSms();
-          } else if (d.su) {
-            smU = d.su;
-            document.querySelectorAll('[data-su]').forEach(function (b) {
-              b.setAttribute('aria-pressed', b.dataset.su === smU);
-            });
-          } else if (d.x === 'smpaste') {
-            smsPaste();
-          } else if (d.x === 'smgo') {
-            smsGo();
-          } else if (d.x === 'smsave') {
-            smsSave();
-          } else if (d.x === 'rst') {
+          },
+          sms: openSms,
+          smpaste: smsPaste,
+          smgo: smsGo,
+          smsave: smsSave,
+          rst: function (el) {
             if (el.dataset.s) {
               snapAct('همه داده‌ها حذف شد', function () {
                 S = { tx: [], bud: {}, theme: S.theme };
@@ -3325,7 +3203,48 @@
               el.dataset.s = 1;
               el.textContent = 'برای تأیید دوباره بزنید';
             }
+          },
+        };
+
+        /* خانواده‌هایی که یک بدنه دارند؛ به‌جای نوشتنِ دوباره، در حلقه سیم‌کشی می‌شوند. */
+        ['lnew', 'lsave', 'lpay', 'ldel'].forEach(function (k) {
+          XACT[k] = function () {
+            loanAct(k);
+          };
+        });
+        ['gnew', 'gsave', 'gadd', 'gsub', 'gdel'].forEach(function (k) {
+          XACT[k] = function () {
+            goalAct(k);
+          };
+        });
+        ['assave', 'asdel'].forEach(function (k) {
+          XACT[k] = function () {
+            assetAct(k);
+          };
+        });
+        ['dsave', 'dsettle', 'desave', 'dedel'].forEach(function (k) {
+          XACT[k] = function () {
+            debtAct(k);
+          };
+        });
+
+        document.addEventListener('click', function (e) {
+          var el = e.target.closest ? e.target.closest(CLICK_SEL) : null;
+          if (Date.now() - swD < 350) return;
+          if (e.target.id === 'cov') return closeCal();
+          if (e.target.id === 'ov') return closeSheet();
+          if (!el) return;
+          var d = el.dataset;
+          if (d.x !== undefined) {
+            var xa = XACT[d.x];
+            if (xa) xa(el);
+            return;
           }
+          for (var k in AACT)
+            if (d[k] !== undefined) {
+              AACT[k](d);
+              return;
+            }
         });
         document.addEventListener('input', function (e) {
           var t = e.target;
@@ -3373,7 +3292,7 @@
           else if (t.dataset.pn !== undefined) {
             var pi = +t.dataset.pn,
               po = S.ppl[pi],
-              pnw = t.value.replace(/[<>&"]/g, '').trim();
+              pnw = clean(t.value);
             if (pnw && pnw !== po && S.ppl.indexOf(pnw) < 0) {
               S.ppl[pi] = pnw;
               S.tx.forEach(function (x) {
@@ -3390,17 +3309,13 @@
             render();
           } else if (t.dataset.ce) {
             var p = t.dataset.ce.split(',');
-            S.cl[p[0]][+p[1]].e =
-              t.value
-                .replace(/[<>&"]/g, '')
-                .trim()
-                .slice(0, 4) || '•';
+            S.cl[p[0]][+p[1]].e = clean(t.value).slice(0, 4) || '•';
             save();
             render();
           } else if (t.dataset.cn) {
             var p2 = t.dataset.cn.split(','),
               c = S.cl[p2[0]][+p2[1]],
-              nn = t.value.replace(/[<>&"]/g, '').trim();
+              nn = clean(t.value);
             if (nn && nn !== c.n && CATS[p2[0]].indexOf(nn) < 0) {
               var on = c.n;
               c.n = nn;
@@ -3415,16 +3330,6 @@
                 delete S.bud[on];
               }
             }
-            save();
-            render();
-          } else if (t.dataset.an) {
-            var i = +t.dataset.an;
-            S.accs[i] = t.value.replace(/[<>&"]/g, '').trim() || S.accs[i];
-            ACCS = S.accs;
-            save();
-            render();
-          } else if (t.dataset.ob) {
-            S.ob[+t.dataset.ob] = P(t.value);
             save();
             render();
           }
