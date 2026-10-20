@@ -1480,7 +1480,6 @@
 }
 /* Tap targets: the inline delete buttons were 19px wide, far below the 44px
    minimum, which made destructive taps easy to miss on a phone. */
-[data-ad],
 [data-cd],
 [data-pdel],
 [data-dd],
